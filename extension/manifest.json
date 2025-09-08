@@ -1,0 +1,28 @@
+{
+	"manifest_version": 3,
+	"name": "UniPi++",
+	"version": "1.0",
+	"description": "FIXME:",
+	"permissions": ["storage", "scripting", "activeTab"],
+	"icons": {
+		"16": "images/icon_16.png",
+		"32": "images/icon_32.png",
+		"48": "images/icon_48.png",
+		"128": "images/icon_128.png"
+	},
+	"action": {
+		"default_popup": "popup.html"
+	},
+	"content_scripts": [
+		{
+			"matches": ["https://libretto.unipi.it/*"],
+			"js": ["scripts/libretto.js", "scripts/lib.js"],
+			"css": ["styles.css"]
+		},
+		{
+			"matches": ["https://www.studenti.unipi.it/auth/studente/Libretto/*"],
+			"js": ["scripts/alice.js", "scripts/lib.js"],
+			"css": ["styles.css"]
+		}
+	]
+}

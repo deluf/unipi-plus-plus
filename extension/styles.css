@@ -1,0 +1,153 @@
+
+/* All classes are prefixed with "upp" (Unipi ++) to avoid conflicts with the website's own CSS */
+
+.upp-main-container {
+    padding: 1em;
+	gap: 1em;
+	background: #F6F6F6;
+	border: 1px solid #000000;
+	display: grid;
+	grid-template-columns: 2fr 3fr;
+	grid-template-rows: auto auto;
+}
+
+.upp-horizontal-flexbox-even {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    align-items: center;
+}
+
+.upp-horizontal-flexbox-center {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+.upp-vertical-flexbox-center {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.upp-almalaurea-title {
+    margin-top: 0;
+    height: 30px;
+    margin-bottom: 14px;
+}
+
+.upp-statistic-big {
+    font-size: 3em;
+	margin-top: -0.15em;
+}
+
+.upp-progress-bar-container {
+    display: flex;
+    flex-direction: row;
+    width: 96%;
+	height: 3em;
+	margin-left: 2%;
+	margin-right: 2%;
+	margin-bottom: .75em;
+	border: 1px solid #000000;
+	background-color: #ffffff;
+	border-radius: 2px;
+    position: relative;
+}
+
+.upp-progress-bar {
+	width: 0%;
+	height: 100%;
+	background-color: #434343;
+	border-top-left-radius: 2px;
+	border-bottom-left-radius: 2px;
+	display: flex;
+	align-items: center;
+	justify-content: right;
+}
+
+.upp-progress-bar-text {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 1.25em;
+	font-weight: bold;
+	padding-right: .5em;
+	padding-left: .5em;
+	color: #ffffff;
+	font-family: cursive;
+}
+
+.upp-histogram-canvas-container {
+    min-height: 160px;
+	min-width: 400px;
+	width: 100%;
+}
+
+.upp-info-text {
+    color: #64748b;
+    font-family: optima;
+    font-size: 1.1em;
+}
+
+.upp-label-with-tooltip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.upp-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    color: #555;
+    font-weight: bold;
+    border: 1px solid #aaa;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+    text-align: center;
+    line-height: 16px;
+    background: #f0f0f0;
+}
+
+.upp-tooltip .upp-tooltip-text {
+    visibility: hidden;
+    font-size: 1.15em;
+    font-weight: normal;
+    opacity: 0;
+    width: 300px;
+    background-color: #f4ebe1;
+    color: #000000;
+    border: 1px solid black;
+    text-align: center;
+    border-radius: 4px;
+    padding: .75em;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%; /* Position above */
+    left: 50%;
+    transform: translateX(-50%);
+    transition: opacity 0.3s;
+}
+
+/* Arrow */
+.upp-tooltip .upp-tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
+
+/* Show on hover */
+.upp-tooltip:hover .upp-tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
