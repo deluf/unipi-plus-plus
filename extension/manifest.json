@@ -2,8 +2,8 @@
 	"manifest_version": 3,
 	"name": "UniPi++",
 	"version": "1.0",
-	"description": "FIXME:",
-	"permissions": ["storage", "scripting", "activeTab"],
+	"description": "FIXME: Portale Alice sotto steroidi",
+	"permissions": ["storage", "activeTab"],
 	"icons": {
 		"16": "images/icon_16.png",
 		"32": "images/icon_32.png",
@@ -11,17 +11,13 @@
 		"128": "images/icon_128.png"
 	},
 	"action": {
-		"default_popup": "popup.html"
+		"default_popup": "popup.html",
+		"default_title": "Impostazioni"
 	},
 	"content_scripts": [
 		{
-			"matches": ["https://libretto.unipi.it/*"],
-			"js": ["scripts/libretto.js", "scripts/lib.js"],
-			"css": ["styles.css"]
-		},
-		{
 			"matches": ["https://www.studenti.unipi.it/auth/studente/Libretto/*"],
-			"js": ["scripts/alice.js", "scripts/lib.js"],
+			"js": ["scripts/alice.js", "scripts/data.js", "scripts/dependencies.js"],
 			"css": ["styles.css"]
 		}
 	]

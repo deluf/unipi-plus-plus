@@ -116,14 +116,15 @@
 
 .upp-tooltip .upp-tooltip-text {
     visibility: hidden;
-    font-size: 1.15em;
     font-weight: normal;
     opacity: 0;
-    width: 300px;
+    width: 350px;
     background-color: #f4ebe1;
     color: #000000;
     border: 1px solid black;
-    text-align: center;
+    font-size: 1.1em;
+    line-height: 1.3em;
+    text-align: justify;
     border-radius: 4px;
     padding: .75em;
     position: absolute;
