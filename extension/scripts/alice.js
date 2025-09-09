@@ -22,27 +22,7 @@ setTimeout(init, 3000);
 
 let selectedAlmalaureaProfile = null;
 
-
-/**
- * IMPOSTAZIONI
- * 
- * # Durata corso 
- * 	120 CFU (Magistrale biennale)
- * 	180 CFU (Triennale)
- * 	300 CFU (Magistrale a ciclo unico)
- * 	Custom value
- * 
- * # Calcolo media
- * Valore lode
- * 	30
- * 	31	
- * 	32
- * 	33
- * mutually exclusive options {
- * 	Escludi i CFU con voto minore (enter the value, int 0 to inf)
- *  Escludi gli esami con voto minore (enter the value, int 0 to inf)
- * }
- */
+let settings = readSettings();
 
 
 // Config

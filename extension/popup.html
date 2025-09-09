@@ -1,5 +1,134 @@
-<html>
-	<body>
-		Questa estensione si attiva automaticamente su libretto.unipi.it e studenti.unipi.it
-	</body>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+	<meta charset="UTF-8">
+	<title>UniPi++</title>
+	<style>
+		body {
+			padding: 1em;
+			width: 280px;
+			font-size: .85em;
+			color: #222;
+		}
+		.setting-title {
+			font-size: 1em;
+			font-weight: 600;
+			margin: 1em 0 .5em;
+			color: #444;
+			display: block;
+		}
+		label {
+			display: block;
+			margin: .4em 0;
+		}
+		input[type="number"] {
+			width: 2em;
+			padding: 3px 5px;
+			border: 1px solid #ccc;
+			border-radius: 3px;
+			text-align: center;
+			transition: all 0.2s ease;
+			box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+		}
+		input[type="number"]:hover {
+			border-color: #888;
+		}
+		input[type="number"]:focus {
+			outline: none;
+			border-color: #0066cc;
+			box-shadow: 0 0 4px rgba(0,102,204,0.5);
+		}
+		/* Hide default spinner arrows */
+		input[type="number"]::-webkit-inner-spin-button,
+		input[type="number"]::-webkit-outer-spin-button {
+			-webkit-appearance: none;
+			margin: 0;
+		}
+		input[type="number"] {
+			appearance: textfield;
+			-moz-appearance: textfield;
+		}
+		select {
+			padding: 4px 6px;
+			border-radius: 3px;
+			border: 1px solid #ccc;
+			transition: border-color 0.2s;
+		}
+		select:focus {
+			outline: none;
+			border-color: #0066cc;
+			box-shadow: 0 0 4px rgba(0,102,204,0.5);
+		}
+		hr {
+			margin: 1em 0;
+			border: none;
+			border-top: 1px solid #ddd;
+		}
+	</style>
+</head>
+<body>
+	<div style="display: flex; gap: 1em; justify-content: center; align-items: center; width: 100%;">
+		<img src="images/icon_48.png" width="48" height="48" alt="UniPi++'s icon">
+		<h2 style="font-family: courier new; margin:0;">UniPi++</h2>
+	</div>
+
+	<hr>
+
+	<span class="setting-title">Durata del corso</span>
+	<label><input type="radio" name="programDuration" value="120"> 120 CFU <span style="color: gray;">(magistrale biennale)</span></label>
+	<label><input type="radio" name="programDuration" value="180" checked> 180 CFU <span style="color: gray;">(triennale)</span></label>
+	<label><input type="radio" name="programDuration" value="300"> 300 CFU <span style="color: gray;">(magistrale a ciclo unico)</span></label>
+	<label style="display:flex; align-items:center; gap:.5em;">
+		<input type="radio" name="programDuration" value="custom">
+		<input type="number" id="customProgramDuration" placeholder="-" value="0">
+		CFU
+		<span style="color: gray;">(valore personalizzato)</span>
+	</label>
+
+	<label class="setting-title" for="honorsValue">
+		Valore della lode
+		<select id="honorsValue">
+			<option value="30">30</option>
+			<option value="31">31</option>
+			<option value="32">32</option>
+			<option value="33" selected>33</option>
+		</select>
+	</label>
+
+	<span class="setting-title">Calcolo della media</span>
+	<label style="display: flex; flex-direction: row; align-items: flex-start;">
+		<input type="radio" name="exclusionPolicy" value="none" checked>
+		<span style="margin-top: 2px; margin-left: .5em;">Non escludere nessun esame/CFU</span>
+	</label>
+
+	<label style="display: flex; flex-direction: row; align-items: flex-start; gap:.5em;">
+		<input type="radio" name="exclusionPolicy" value="byCfu">
+		<div style="display: flex; flex-direction: column; margin-top: 2px;">	
+			Escludi i CFU con voto più basso
+			<div>
+				Numero di CFU da escludere: 
+				<input type="number" id="excludedCFUs" min="0" placeholder="-">
+			</div>
+		</div>
+	</label>
+
+	<label style="display: flex; flex-direction: row; align-items: flex-start; gap:.5em;">
+		<input type="radio" name="exclusionPolicy" value="byExams">
+		<div style="display: flex; flex-direction: column; margin-top: 2px;">	
+			Escludi gli esami con voto più basso
+			<div>
+				Numero di esami da escludere: 
+				<input type="number" id="excludedExams" min="0" placeholder="-">
+			</div>
+			<span style="color: gray;">A parità di voto, vengono esclusi gli esami con più CFU (più svantaggiosi)</span>
+		</div>
+	</label>
+
+	<hr>
+
+	<span style="color: gray; margin-top:1em;">L'estensione si attiva automaticamente sul portale alice (<i>studenti.unipi.it</i>)</span>
+
+	<script src="scripts/popup.js"></script>
+	<script src="scripts/readSettings.js"></script>
+</body>
 </html>
