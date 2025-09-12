@@ -102,18 +102,18 @@
 	</label>
 
 	<label style="display: flex; flex-direction: row; align-items: flex-start; gap:.5em;">
-		<input type="radio" name="exclusionPolicy" value="byCfu">
+		<input type="radio" name="exclusionPolicy" value="credits">
 		<div style="display: flex; flex-direction: column; margin-top: 2px;">	
 			Escludi i CFU con voto più basso
 			<div>
 				Numero di CFU da escludere: 
-				<input type="number" id="excludedCFUs" min="0" placeholder="-">
+				<input type="number" id="excludedCredits" min="0" placeholder="-">
 			</div>
 		</div>
 	</label>
 
 	<label style="display: flex; flex-direction: row; align-items: flex-start; gap:.5em;">
-		<input type="radio" name="exclusionPolicy" value="byExams">
+		<input type="radio" name="exclusionPolicy" value="exams">
 		<div style="display: flex; flex-direction: column; margin-top: 2px;">	
 			Escludi gli esami con voto più basso
 			<div>
@@ -128,7 +128,7 @@
 
 	<span style="color: gray; margin-top:1em;">L'estensione si attiva automaticamente sul portale alice (<i>studenti.unipi.it</i>)</span>
 
-	<script src="scripts/popup.js"></script>
-	<script src="scripts/readSettings.js"></script>
+	<script src="popup.js"></script>
+	<script src="scripts/defaultSettings.js"></script>
 </body>
 </html>

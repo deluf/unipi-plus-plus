@@ -1,5 +1,16 @@
 
-/* All classes are prefixed with "upp" (Unipi ++) to avoid conflicts with the website's own CSS */
+/* All classes are prefixed with "upp" (UniPi++) to avoid conflicts with the website's own CSS */
+
+.upp-checkbox {
+    margin-right: 5px !important;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.upp-almalaurea-filter:invalid { 
+    color: gray; 
+}
 
 .upp-main-container {
     padding: 1em;
@@ -80,7 +91,7 @@
 	font-family: cursive;
 }
 
-.upp-histogram-canvas-container {
+.upp-grade-distribution-chart-container {
     min-height: 160px;
 	min-width: 400px;
 	width: 100%;
@@ -147,7 +158,6 @@
     border-color: #333 transparent transparent transparent;
 }
 
-/* Show on hover */
 .upp-tooltip:hover .upp-tooltip-text {
     visibility: visible;
     opacity: 1;

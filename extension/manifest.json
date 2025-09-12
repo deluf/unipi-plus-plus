@@ -2,8 +2,8 @@
 	"manifest_version": 3,
 	"name": "UniPi++",
 	"version": "1.0",
-	"description": "FIXME: Portale Alice sotto steroidi",
-	"permissions": ["storage", "activeTab"],
+	"description": "Estende il portale Alice dell'università di Pisa aggiungendo numerose statistiche sugli esami verbalizzati",
+	"permissions": ["storage"],
 	"icons": {
 		"16": "images/icon_16.png",
 		"32": "images/icon_32.png",
@@ -12,12 +12,12 @@
 	},
 	"action": {
 		"default_popup": "popup.html",
-		"default_title": "Impostazioni"
+		"default_title": "UniPi++"
 	},
 	"content_scripts": [
 		{
 			"matches": ["https://www.studenti.unipi.it/auth/studente/Libretto/*"],
-			"js": ["scripts/alice.js", "scripts/data.js", "scripts/dependencies.js"],
+			"js": ["scripts/almaLaureaData.js", "scripts/defaultSettings.js", "scripts/dependencies.js", "scripts/alice.js"],
 			"css": ["styles.css"]
 		}
 	]

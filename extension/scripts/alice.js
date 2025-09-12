@@ -1,90 +1,92 @@
 
-"use strict";
-
-setTimeout(init, 3000);
-
 /**
- * rivedi il codice
- * 
- * aggiorna il dropdown degli anni se tolgo esami
  * timeout di 3s è unreliable asf
- * non aggiornare ogni volta che cambio dal dropdown almalaurea (almeno i due selettivi sopra)
- * sconta voto + basso / cfu + bassi
- * non collassare tutto se le stats almalaurea sono null ma rimetti -
- * 
- * 		
- * schermata impostazioni
- * 		fixare la percentuale di completamento, default 180 o 300 e poi 60 all'anno
+ * fare i dati almalaurea in inglese?
  * persistenza dei dati (magari divisi per matricola sarebbe top)
  * layout responsive
  * schermata previsione
  * * */
 
-let selectedAlmalaureaProfile = null;
+"use strict";
 
-let settings = readSettings();
+setTimeout(init, 3000);
 
+chrome.storage.onChanged.addListener((changes, areaName) => {
+	if (areaName === "local") {
+		global.extensionSettings = changes.settings.newValue;
+		updateGUI();
+	}
+});
 
-// Config
-const HONORS_VALUE = 33;
+// Global variables
+const global = {
+	selectedAlmalaureaStats: null,
+	extensionSettings: DEFAULT_SETTINGS,
+	suitableCredits: 0, 
+	parsedExams: []
 
-let suitableECTS = 0; // ECTS that contribute to the total but without an associated grade
-let exams = [];
-let distributionChart = null;
-let timeChart = null;
+}
 
-let ECTSprogress = null;
-let ECTSprogressTextLeft = null;
-let ECTSprogressTextRight = null;
-let ECTSprogressTextLeftmost = null;
-let ECTSprogressTextRightmost = null;
+// GUI elements
+const GUI = {
+	// Academic year filter
+	academicYearFilter: null,
 
-let weightedAverageValue = null;
-let averageValue = null;
-let gradePredictionValue = null;
-let gradePredictionValueCI = null;
+    // Charts
+    gradeDistributionCanvas: null,
+    gradeDistributionChart: null,
+    examsCanvas: null,
+    examsChart: null,
 
-let almalaureaVotoEsamiValue = null;
-let almalaureaVotoFinaleValue = null;
-let almalaureaEtaAllaLaureaValue = null;
-let almalaureaDurataStudiValue = null;
+    // Credits progress bar
+    creditsProgress: null,
+    creditsProgressTextLeft: null,
+    creditsProgressTextRight: null,
+    creditsProgressTextLeftmost: null,
+    creditsProgressTextRightmost: null,
 
-let histogramCanvas = null;
-let timeSeriesCanvas = null;
+    // User stats
+    weightedAverageValue: null,
+    arithmeticAverageValue: null,
+    finalGradePredictionValue: null,
+    finalGradePredictionValuePI: null,
 
-// --- Start of New Code ---
-let almalaureaStatsText = null; 
-// --- End of New Code ---
+    // AlmaLaurea stats
+    almalaureaVotoEsamiValue: null,
+    almalaureaVotoFinaleValue: null,
+    almalaureaEtaAllaLaureaValue: null,
+    almalaureaDurataStudiValue: null,
+    almalaureaStatsBottomText: null
+};
 
 async function init() {
+	const localStorageQueryResult = await chrome.storage.local.get("settings");
+	global.extensionSettings = localStorageQueryResult.settings;
+	
 	const table = document.querySelector("#tableLibretto");
+	if (table == null) { return; } // The user is in the career selection page
 	const tbody = table.querySelector("tbody");
 	const rows = tbody.querySelectorAll("tr");
 
 	insertCheckboxes(rows);
-	parseExams(rows);
+	global.parsedExams = parseExams(rows);
 	drawLayout();
-	updateMetrics();
+	updateGUI();
 
 	// Add listeners to the checkboxes
 	tbody.querySelectorAll(`input[type=checkbox].upp-checkbox`).forEach(cb => {
 		cb.addEventListener("change", () => {
-			updateMetrics();
+			updateGUI();
 		});
 	});
 }
-
 
 function insertCheckboxes(rows) {
 	rows.forEach(row => {
 		const checkbox = document.createElement("input");
 		checkbox.type = "checkbox";
-		checkbox.name = "includeInMetrics";
+		checkbox.name = "includeInAverage";
 		checkbox.className = "upp-checkbox";
-		checkbox.style.marginRight = "10px";
-		checkbox.style.width = "16px";
-		checkbox.style.height = "16px";
-		checkbox.style.cursor = "pointer";
 
 		// False by default
 		checkbox.checked = false;
@@ -95,233 +97,206 @@ function insertCheckboxes(rows) {
 }
 
 function parseExams(rows) {
-	for (let row of rows) {
-		try {
-			let cells = row.querySelectorAll("td");
-			let checkbox = cells[0].querySelector("input[type=checkbox].upp-checkbox");
+	let parsedExams = []
+	for (const row of rows) {
+		const cells = row.querySelectorAll("td");
+		const checkbox = cells[0].querySelector("input[type=checkbox].upp-checkbox");
 
-			// Removes the 5-letter exam code and " - " 
-			//  (e.g, "075II - COMUNICAZIONI NUMERICHE" -> "COMUNICAZIONI NUMERICHE")
-			let exam = cells[0].textContent.slice(8).replace("\n", "").trim(); 
+		// Do not count the exam if it contains either:
+		// - #sovran (attività sovrannumeraria) -> Extra activities
+		// - #debito (debito formativo / OFA)	-> Knowledge you were supposed to have before starting the degree
+		if (row.querySelector("#sovran") || row.querySelector("#debito")) {
+			checkbox.disabled = true;
+			continue;
+		}
 
-			let ects = parseInt(cells[2].textContent, 10);
+		// A mandatory exam has not been completed yet by the student
+		if (!cells[5].textContent.includes("-")) {
+			checkbox.disabled = true;
+			continue;
+		}
 
-			// (e.g. "28 - 21/09/2022" -> 28, "21/09/2022")
-			if (!cells[5].textContent.includes("-")) {
-				checkbox.disabled = true;
-				continue;
-			}
-			let grade_and_date = cells[5].textContent.split("-").map(s => s.trim());
-			let grade = grade_and_date[0].includes("L") ? HONORS_VALUE : parseInt(grade_and_date[0], 10); 
-			let date = parseDateDDMMYY(grade_and_date[1])
-				
-			// The grade can be NaN if grade_and_date[0] = "IDO" (a.k.a. "suitable")
-			if (isNaN(grade)) {
-				if (row.querySelector("#sovran") || row.querySelector("#debito")) {
-					checkbox.disabled = true; // Do not let the user select these kind of exams without a grade
-				}
-				else {
-					suitableECTS += ects
-					checkbox.checked = true;
-					checkbox.disabled = true; // Do not let the user select these kind of exams without a grade
-				}
-				continue;
-			}
+		// Removes the 5-letter exam code and " - " 
+		//  (e.g, "075II - COMUNICAZIONI NUMERICHE" -> "COMUNICAZIONI NUMERICHE")
+		const name = cells[0].textContent.slice(8).trim().replaceAll("\n", ""); 
+		const credits = parseInt(cells[2].textContent, 10);
+
+		// (e.g. "28 - 21/09/2022" -> 28, "21/09/2022")
+		const grade_and_date = cells[5].textContent.split("-").map(s => s.trim());
+		const date = parseDateDDMMYY(grade_and_date[1])
+
+		let grade = grade_and_date[0];
+		let excludedCredits = 0;
+		if (grade === "IDO") { 
+			// The exam does not havea a grade, just a "passed")
+			grade = NaN;
+			checkbox.disabled = true;
+			excludedCredits = credits; 
+		} else if (grade === "30L") { 
+			grade = 31; // Later it will be converted to the actual honors value
+		} else { 
+			grade = parseInt(grade, 10); 
+		}
 		
-			if (exam.length <= 0 || isNaN(ects) || ects <= 0 || grade < 18) {
-				console.error("Unable to parse row:")
-				console.error(row)
-				console.error({exam, ects, grade, date})
-				checkbox.disabled = true;
-				continue;
-			}
-
-			// Do not count the exam if it contains either:
-			// - #sovran (attività sovrannumeraria) -> Extra activities
-			// - #debito (debito formativo / OFA)	-> Knowledge you were supposed to have before starting the degree
-			if (row.querySelector("#sovran") || row.querySelector("#debito")) {
-				continue;
-			}
-	
-			let gradetmp = Math.round(Math.random() * 14 + 18)
-			grade = gradetmp > 30 ? HONORS_VALUE : gradetmp;
-
-			checkbox.checked = true;
-			exams.push({exam, ects, grade, date, checkbox});
-		}
-		catch(error) {
-			console.error(error);
-			continue; 
-		}
+		// FIXME: Debug - use random grades
+		let gradeTmp = Math.round(Math.random() * 13 + 18)
+		if (isNaN(grade)) { gradeTmp = grade; }
+		
+		checkbox.checked = true;
+		parsedExams.push({name, credits, excludedCredits, grade : gradeTmp, date, checkbox});
 	}
+	return parsedExams;
 }
 
-// Parses DD/MM/YY strings into a JS Date object
+/**
+ * Parses DD/MM/YY strings into a JS Date object
+ */
 function parseDateDDMMYY(date_string) {
-	const parts = date_string.split('/');
+	const parts = date_string.split("/");
 	const day = parseInt(parts[0], 10);
 	const month = parseInt(parts[1], 10) - 1; // Months are 0-based in JS
 	const year = parseInt(parts[2], 10);
 	return new Date(year, month, day);
 }
 
-// Helper to determine the academic year for a given date
-// An academic year runs from October 1st to September 31st
-function getAcademicYear(date) {
-    const year = date.getFullYear();
-    const month = date.getMonth(); // 0-indexed (October is 9)
-    const startYear = month >= 9 ? year : year - 1;
-    return `${startYear}/${startYear + 1}`;
-}
-
-
 function drawLayout() {
-
 	// Draw the main display box below #libretto-inlineForms
 	const target = document.getElementById("libretto-inlineForms");
-	let mainDiv = document.createElement("div");
+	const mainDiv = document.createElement("div");
 	mainDiv.className = "upp-main-container";
 	target.insertAdjacentElement("afterend", mainDiv);
 
 		// User stats
-	let userStatsDiv = document.createElement("div");
+	const userStatsDiv = document.createElement("div");
 	userStatsDiv.style.gridColumn = "1";
 	userStatsDiv.style.gridRow = "1";
 	mainDiv.appendChild(userStatsDiv);
 	
 			// User stats -> Title
-	let userStatsTitleDiv = document.createElement("div");
+	const userStatsTitleDiv = document.createElement("div");
 	userStatsTitleDiv.className = "upp-horizontal-flexbox-center"
 	userStatsTitleDiv.style.gap = "1em";
 	userStatsTitleDiv.style.marginBottom = "1em";
 	userStatsDiv.appendChild(userStatsTitleDiv);
 
-	let userStatsTitle = document.createElement("h3");
+				// User stats -> Title -> Text
+	const userStatsTitle = document.createElement("h3");
 	userStatsTitle.textContent = "Le tue statistiche";
 	userStatsTitle.style.margin = "0";
 	userStatsTitleDiv.appendChild(userStatsTitle);
 	
-			// User stats -> Academic Year Filter
-    const academicYears = [...new Set(exams.map(exam => getAcademicYear(exam.date)))].sort();
-    
-    let filterSelect = document.createElement("select");
-    filterSelect.id = "year-filter";
-    filterSelect.style.padding = "5px";
-
-    let allOption = document.createElement("option");
-    allOption.value = "all";
-    allOption.textContent = "Tutti gli anni";
-    filterSelect.appendChild(allOption);
-
-    academicYears.forEach(year => {
-        let option = document.createElement("option");
-        option.value = year;
-        option.textContent = year;
-        filterSelect.appendChild(option);
-    });
-    
-    filterSelect.addEventListener("change", updateMetrics);
-    userStatsTitleDiv.appendChild(filterSelect);
+				// User stats -> Title -> Academic Year Filter
+    GUI.academicYearFilter = document.createElement("select");
+    GUI.academicYearFilter.style.padding = "5px";
+    GUI.academicYearFilter.addEventListener("change", updateGUI);
+    userStatsTitleDiv.appendChild(GUI.academicYearFilter);
 	
 			// User stats -> Most important stats
-	let bigStatsDiv = document.createElement("div");
+	const bigStatsDiv = document.createElement("div");
 	bigStatsDiv.className = "upp-horizontal-flexbox-even";
 	userStatsDiv.appendChild(bigStatsDiv);
 
 				// User stats -> Most important stats -> Weighted average
-	let weightedAverageDiv = document.createElement("div");
+	const weightedAverageDiv = document.createElement("div");
 	weightedAverageDiv.className = "upp-vertical-flexbox-center";
-	let weightedAverageLabel = document.createElement("span");
-	weightedAverageLabel.textContent = "Media ponderata";
-	weightedAverageDiv.appendChild(weightedAverageLabel);
-	weightedAverageValue = document.createElement("span");
-	weightedAverageValue.textContent = "-";
-	weightedAverageValue.className = "upp-statistic-big";
-	
-	weightedAverageDiv.appendChild(weightedAverageValue);
 	bigStatsDiv.appendChild(weightedAverageDiv);
 
-				// User stats -> Most important stats -> average
-	let averageDiv = document.createElement("div");
-	averageDiv.className = "upp-vertical-flexbox-center";
-	let averageLabel = document.createElement("span");
-	averageLabel.textContent = "Media aritmetica";
-	averageDiv.appendChild(averageLabel);
-	averageValue = document.createElement("span");
-	averageValue.textContent = "-";
-	averageValue.className = "upp-statistic-big";
-	averageDiv.appendChild(averageValue);
-	bigStatsDiv.appendChild(averageDiv);
+	const weightedAverageLabel = document.createElement("span");
+	weightedAverageLabel.textContent = "Media ponderata";
+	weightedAverageDiv.appendChild(weightedAverageLabel);
+	
+	GUI.weightedAverageValue = document.createElement("span");
+	GUI.weightedAverageValue.textContent = "-";
+	GUI.weightedAverageValue.className = "upp-statistic-big";
+	weightedAverageDiv.appendChild(GUI.weightedAverageValue);
+
+				// User stats -> Most important stats -> Arithmetic average
+	const arithmeticAverageDiv = document.createElement("div");
+	arithmeticAverageDiv.className = "upp-vertical-flexbox-center";
+	bigStatsDiv.appendChild(arithmeticAverageDiv);
+	
+	const arithmeticAverageLabel = document.createElement("span");
+	arithmeticAverageLabel.textContent = "Media aritmetica";
+	arithmeticAverageDiv.appendChild(arithmeticAverageLabel);
+	
+	GUI.arithmeticAverageValue = document.createElement("span");
+	GUI.arithmeticAverageValue.textContent = "-";
+	GUI.arithmeticAverageValue.className = "upp-statistic-big";
+	arithmeticAverageDiv.appendChild(GUI.arithmeticAverageValue);
 
 				// User stats -> Most important stats -> Predicted final grade
-	let gradePredictionDiv = document.createElement("div");
-	gradePredictionDiv.className = "upp-vertical-flexbox-center";
-	let gradePredictionLabel = document.createElement("span");
-	gradePredictionLabel.textContent = "Voto previsto";
-	addTooltip(gradePredictionLabel, "Il voto di laurea viene stimato confrontando la tua media aritmetica con quella dei laureati tra il 2022 ed il 2024 in tutto l'ateneo.\nÈ possibile affermare con il 95% di sicurezza che il tuo vero voto di laurea ricadrà nel range indicato dal ±");
-	gradePredictionDiv.appendChild(gradePredictionLabel);
-	let gradePredictionValueDiv = document.createElement("div");
-	gradePredictionValueDiv.className = "upp-horizontal-flexbox-center";
-	gradePredictionValue = document.createElement("span");
-	gradePredictionValue.textContent = "-";
-	gradePredictionValue.className = "upp-statistic-big";
-	gradePredictionValueCI = document.createElement("span");
-	gradePredictionValueCI.textContent = "-";
-	gradePredictionValueCI.style.letterSpacing = "0.1em";
-	gradePredictionValueCI.style.marginLeft = "0.1em";
-	gradePredictionValueCI.style.marginBottom = "0.1em";
-	gradePredictionValueDiv.appendChild(gradePredictionValue);
-	gradePredictionValueDiv.appendChild(gradePredictionValueCI);
-	gradePredictionDiv.appendChild(gradePredictionValueDiv);
-	bigStatsDiv.appendChild(gradePredictionDiv);
+	const finalGradePredictionDiv = document.createElement("div");
+	finalGradePredictionDiv.className = "upp-vertical-flexbox-center";
+	bigStatsDiv.appendChild(finalGradePredictionDiv);
+
+	const finalGradePredictionLabel = document.createElement("span");
+	finalGradePredictionLabel.textContent = "Voto previsto";
+	addTooltip(finalGradePredictionLabel, "Il voto di laurea viene stimato confrontando la tua media aritmetica con quella dei laureati tra il 2022 ed il 2024 in tutto l'ateneo.\nÈ possibile affermare con il 95% di sicurezza che il tuo vero voto di laurea ricadrà nel range indicato dal ±");
+	finalGradePredictionDiv.appendChild(finalGradePredictionLabel);
+
+	const finalGradePredictionValueDiv = document.createElement("div");
+	finalGradePredictionValueDiv.className = "upp-horizontal-flexbox-center";
+	finalGradePredictionDiv.appendChild(finalGradePredictionValueDiv);
+	
+	GUI.finalGradePredictionValue = document.createElement("span");
+	GUI.finalGradePredictionValue.textContent = "-";
+	GUI.finalGradePredictionValue.className = "upp-statistic-big";
+	finalGradePredictionValueDiv.appendChild(GUI.finalGradePredictionValue);
+	
+	GUI.finalGradePredictionValuePI = document.createElement("span");
+	GUI.finalGradePredictionValuePI.textContent = "-";
+	GUI.finalGradePredictionValuePI.style.letterSpacing = "0.1em";
+	GUI.finalGradePredictionValuePI.style.marginLeft = "0.1em";
+	GUI.finalGradePredictionValuePI.style.marginBottom = "0.1em";
+	finalGradePredictionValueDiv.appendChild(GUI.finalGradePredictionValuePI);
 
 			// User stats -> Progress bar
-	let ECTSprogressBarDiv = document.createElement("div");
-	ECTSprogressBarDiv.className = "upp-progress-bar-container";
-	userStatsDiv.appendChild(ECTSprogressBarDiv);
+	const creditsProgressBarDiv = document.createElement("div");
+	creditsProgressBarDiv.className = "upp-progress-bar-container";
+	userStatsDiv.appendChild(creditsProgressBarDiv);
 	
-	ECTSprogress = document.createElement("div");
-	ECTSprogress.className = "upp-progress-bar";
-	ECTSprogressBarDiv.appendChild(ECTSprogress);
+	GUI.creditsProgress = document.createElement("div");
+	GUI.creditsProgress.className = "upp-progress-bar";
+	creditsProgressBarDiv.appendChild(GUI.creditsProgress);
 	
-	ECTSprogressTextLeft = document.createElement("div");
-	ECTSprogressTextLeft.className = "upp-progress-bar-text";
-	ECTSprogress.appendChild(ECTSprogressTextLeft);
+	GUI.creditsProgressTextLeft = document.createElement("div");
+	GUI.creditsProgressTextLeft.className = "upp-progress-bar-text";
+	GUI.creditsProgress.appendChild(GUI.creditsProgressTextLeft);
 
-	ECTSprogressTextRight = document.createElement("div");
-	ECTSprogressTextRight.className = "upp-progress-bar-text";
-	ECTSprogressTextRight.style.color = "#000000";
-	ECTSprogressBarDiv.appendChild(ECTSprogressTextRight);
+	GUI.creditsProgressTextRight = document.createElement("div");
+	GUI.creditsProgressTextRight.className = "upp-progress-bar-text";
+	GUI.creditsProgressTextRight.style.color = "#000000";
+	creditsProgressBarDiv.appendChild(GUI.creditsProgressTextRight);
 
-	ECTSprogressTextLeftmost = document.createElement("div");
-	ECTSprogressTextLeftmost.className = "upp-progress-bar-text";
-	ECTSprogressTextLeftmost.style.position = "absolute";
-	ECTSprogressTextLeftmost.style.left = "0";
-	ECTSprogressBarDiv.appendChild(ECTSprogressTextLeftmost);
+	GUI.creditsProgressTextLeftmost = document.createElement("div");
+	GUI.creditsProgressTextLeftmost.className = "upp-progress-bar-text";
+	GUI.creditsProgressTextLeftmost.style.position = "absolute";
+	GUI.creditsProgressTextLeftmost.style.left = "0";
+	creditsProgressBarDiv.appendChild(GUI.creditsProgressTextLeftmost);
 	
-	ECTSprogressTextRightmost = document.createElement("div");
-	ECTSprogressTextRightmost.className = "upp-progress-bar-text";
-	ECTSprogressTextRightmost.style.position = "absolute";
-	ECTSprogressTextRightmost.style.right = "0";
-	ECTSprogressTextRightmost.style.color = "#000000";
-	ECTSprogressBarDiv.appendChild(ECTSprogressTextRightmost);
+	GUI.creditsProgressTextRightmost = document.createElement("div");
+	GUI.creditsProgressTextRightmost.className = "upp-progress-bar-text";
+	GUI.creditsProgressTextRightmost.style.position = "absolute";
+	GUI.creditsProgressTextRightmost.style.right = "0";
+	GUI.creditsProgressTextRightmost.style.color = "#000000";
+	creditsProgressBarDiv.appendChild(GUI.creditsProgressTextRightmost);
 
-			// User stats -> Histogram canvas
-	let histogramDiv = document.createElement("div");
-	histogramDiv.className = "upp-histogram-canvas-container"
-	histogramCanvas = document.createElement("canvas");
-	histogramCanvas.id = "grades-histogram";
-	histogramDiv.appendChild(histogramCanvas);
-	userStatsDiv.appendChild(histogramDiv);
+			// User stats -> Grade distribution canvas
+	const gradeDistributionDiv = document.createElement("div");
+	gradeDistributionDiv.className = "upp-grade-distribution-chart-container"
+	userStatsDiv.appendChild(gradeDistributionDiv);
+
+	GUI.gradeDistributionCanvas = document.createElement("canvas");
+	gradeDistributionDiv.appendChild(GUI.gradeDistributionCanvas);
 	
 		// AlmaLaurea stats
-	let almalaureaStatsDiv = document.createElement("div");
+	const almalaureaStatsDiv = document.createElement("div");
 	almalaureaStatsDiv.style.gridRow = "1";
 	almalaureaStatsDiv.style.gridColumn = "2";
 	mainDiv.appendChild(almalaureaStatsDiv);
 	
 			// AlmaLaurea stats -> Title
-	let almalaureaTitle = document.createElement("h3");
+	const almalaureaTitle = document.createElement("h3");
 	almalaureaTitle.textContent = "Statistiche medie ateneo (AlmaLaurea)";
 	almalaureaTitle.className = "upp-almalaurea-title upp-horizontal-flexbox-center"
 	almalaureaStatsDiv.appendChild(almalaureaTitle);
@@ -330,129 +305,130 @@ function drawLayout() {
 	drawAlmalaureaFilters(almalaureaStatsDiv);
 
 			// Almalaurea stats -> Most important stats
-	let bigAlmalaureaStatsDiv = document.createElement("div");
+	const bigAlmalaureaStatsDiv = document.createElement("div");
 	bigAlmalaureaStatsDiv.className = "upp-horizontal-flexbox-even";
 	almalaureaStatsDiv.appendChild(bigAlmalaureaStatsDiv);
 
 				// Almalaurea stats -> Most important stats -> Voto esami
-	let almalaureaVotoEsamiDiv = document.createElement("div");
+	const almalaureaVotoEsamiDiv = document.createElement("div");
 	almalaureaVotoEsamiDiv.className = "upp-vertical-flexbox-center";
-	let almalaureaVotoEsamiLabel = document.createElement("span");
+	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoEsamiDiv);
+
+	const almalaureaVotoEsamiLabel = document.createElement("span");
 	almalaureaVotoEsamiLabel.textContent = "Voto esami";
 	addTooltip(almalaureaVotoEsamiLabel, "AlmaLaurea calcola questo valore come la media aritmetica dei voti degli esami considerando 30L come 30. Per questo motivo, il valore è leggermente inferiore alla vera media aritmetica del corso selezionato");
 	almalaureaVotoEsamiDiv.appendChild(almalaureaVotoEsamiLabel);
-	almalaureaVotoEsamiValue = document.createElement("span");
-	almalaureaVotoEsamiValue.textContent = "-";
-	almalaureaVotoEsamiValue.className = "upp-statistic-big";
-	almalaureaVotoEsamiDiv.appendChild(almalaureaVotoEsamiValue);
-	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoEsamiDiv);
+	
+	GUI.almalaureaVotoEsamiValue = document.createElement("span");
+	GUI.almalaureaVotoEsamiValue.textContent = "-";
+	GUI.almalaureaVotoEsamiValue.className = "upp-statistic-big";
+	almalaureaVotoEsamiDiv.appendChild(GUI.almalaureaVotoEsamiValue);
 
 				// Almalaurea stats -> Most important stats -> Voto finale
-	let almalaureaVotoFinaleDiv = document.createElement("div");
+	const almalaureaVotoFinaleDiv = document.createElement("div");
 	almalaureaVotoFinaleDiv.className = "upp-vertical-flexbox-center";
-	let almalaureaVotoFinaleLabel = document.createElement("span");
+	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoFinaleDiv);
+	
+	const almalaureaVotoFinaleLabel = document.createElement("span");
 	almalaureaVotoFinaleLabel.textContent = "Voto finale";
 	addTooltip(almalaureaVotoFinaleLabel, "AlmaLaurea calcola questo valore considerando 110L come 113");
 	almalaureaVotoFinaleDiv.appendChild(almalaureaVotoFinaleLabel);
-	almalaureaVotoFinaleValue = document.createElement("span");
-	almalaureaVotoFinaleValue.textContent = "-";
-	almalaureaVotoFinaleValue.className = "upp-statistic-big";
-	almalaureaVotoFinaleDiv.appendChild(almalaureaVotoFinaleValue);
-	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoFinaleDiv);
+	
+	GUI.almalaureaVotoFinaleValue = document.createElement("span");
+	GUI.almalaureaVotoFinaleValue.textContent = "-";
+	GUI.almalaureaVotoFinaleValue.className = "upp-statistic-big";
+	almalaureaVotoFinaleDiv.appendChild(GUI.almalaureaVotoFinaleValue);
 
 				// Almalaurea stats -> Most important stats -> Età alla laurea
-	let almalaureaEtaAllaLaureaDiv = document.createElement("div");
+	const almalaureaEtaAllaLaureaDiv = document.createElement("div");
 	almalaureaEtaAllaLaureaDiv.className = "upp-vertical-flexbox-center";
-	let almalaureaEtaAllaLaureaLabel = document.createElement("span");
+	bigAlmalaureaStatsDiv.appendChild(almalaureaEtaAllaLaureaDiv);
+	
+	const almalaureaEtaAllaLaureaLabel = document.createElement("span");
 	almalaureaEtaAllaLaureaLabel.textContent = "Età alla laurea";
 	almalaureaEtaAllaLaureaDiv.appendChild(almalaureaEtaAllaLaureaLabel);
-	almalaureaEtaAllaLaureaValue = document.createElement("span");
-	almalaureaEtaAllaLaureaValue.textContent = "-";
-	almalaureaEtaAllaLaureaValue.className = "upp-statistic-big";
-	almalaureaEtaAllaLaureaDiv.appendChild(almalaureaEtaAllaLaureaValue);
-	bigAlmalaureaStatsDiv.appendChild(almalaureaEtaAllaLaureaDiv);
+	
+	GUI.almalaureaEtaAllaLaureaValue = document.createElement("span");
+	GUI.almalaureaEtaAllaLaureaValue.textContent = "-";
+	GUI.almalaureaEtaAllaLaureaValue.className = "upp-statistic-big";
+	almalaureaEtaAllaLaureaDiv.appendChild(GUI.almalaureaEtaAllaLaureaValue);
 
 				// Almalaurea stats -> Most important stats -> Durata studi
-	let almalaureaDurataStudiDiv = document.createElement("div");
+	const almalaureaDurataStudiDiv = document.createElement("div");
 	almalaureaDurataStudiDiv.className = "upp-vertical-flexbox-center";
-	let almalaureaDurataStudiLabel = document.createElement("span");
+	bigAlmalaureaStatsDiv.appendChild(almalaureaDurataStudiDiv);
+	
+	const almalaureaDurataStudiLabel = document.createElement("span");
 	almalaureaDurataStudiLabel.textContent = "Durata studi";
 	almalaureaDurataStudiDiv.appendChild(almalaureaDurataStudiLabel);
-	almalaureaDurataStudiValue = document.createElement("span");
-	almalaureaDurataStudiValue.textContent = "-";
-	almalaureaDurataStudiValue.className = "upp-statistic-big";
-	almalaureaDurataStudiDiv.appendChild(almalaureaDurataStudiValue);
-	bigAlmalaureaStatsDiv.appendChild(almalaureaDurataStudiDiv);
+	
+	GUI.almalaureaDurataStudiValue = document.createElement("span");
+	GUI.almalaureaDurataStudiValue.textContent = "-";
+	GUI.almalaureaDurataStudiValue.className = "upp-statistic-big";
+	almalaureaDurataStudiDiv.appendChild(GUI.almalaureaDurataStudiValue);
 
 					// Almalaurea stats -> Bottom text
-	almalaureaStatsText = document.createElement("div");
-	almalaureaStatsText.className = "upp-horizontal-flexbox-center upp-info-text";
-	almalaureaStatsText.textContent = "Seleziona un corso di laurea per visualizzane le statistiche";
-	almalaureaStatsDiv.appendChild(almalaureaStatsText);
+	GUI.almalaureaStatsBottomText = document.createElement("div");
+	GUI.almalaureaStatsBottomText.className = "upp-horizontal-flexbox-center upp-info-text";
+	GUI.almalaureaStatsBottomText.textContent = "Seleziona un corso di laurea per visualizzane le statistiche";
+	almalaureaStatsDiv.appendChild(GUI.almalaureaStatsBottomText);
 
 		// Time series chart
-	let timeSeriesDiv = document.createElement("div");
+	const timeSeriesDiv = document.createElement("div");
 	timeSeriesDiv.style.gridColumn = "1 / span 2";
 	timeSeriesDiv.style.gridRow = "2";
 	timeSeriesDiv.style.height = "300px";
 	timeSeriesDiv.style.maxHeight = "300px";
 	timeSeriesDiv.style.width = "100%";
-	timeSeriesCanvas = document.createElement("canvas");
-	timeSeriesCanvas.id = "time-series-chart";
-	timeSeriesDiv.appendChild(timeSeriesCanvas);
 	mainDiv.appendChild(timeSeriesDiv);
+
+	GUI.examsCanvas = document.createElement("canvas");
+	timeSeriesDiv.appendChild(GUI.examsCanvas);
 }
 
 function addTooltip(element, text) {
-	element.className = element.className + " upp-label-with-tooltip";
+	element.classList.add("upp-label-with-tooltip");
 	
-	let tooltip = document.createElement("div");
+	const tooltip = document.createElement("div");
 	tooltip.className = "upp-tooltip";
 	tooltip.textContent = "?";
 	element.appendChild(tooltip);
 
-	let tooltipText = document.createElement("div");
+	const tooltipText = document.createElement("div");
 	tooltipText.className = "upp-tooltip-text"
 	tooltipText.textContent = text;
 	tooltip.appendChild(tooltipText);
 }
 
-// --- Start of New Code ---
 function drawAlmalaureaFilters(container) {
-    if (almaLaureaData.length === 0) {
-        container.innerHTML += "<p>Dati AlmaLaurea non disponibili.</p>";
-        return;
-    }
 
     const createSelect = (id, labelText) => {
         const div = document.createElement("div");
-        div.style.marginBottom = "10px";
-        
+        div.style.marginBottom = ".75em";
+        container.appendChild(div);
+
         const label = document.createElement("label");
         label.htmlFor = id;
         label.textContent = labelText;
         label.style.display = "block";
-        label.style.marginBottom = ".1em";
         label.style.fontWeight = "normal";
+        label.style.marginBottom = ".1em";
         label.style.marginLeft = "1em";
+		div.appendChild(label);
 
         const select = document.createElement("select");
         select.id = id;
+        select.className = "upp-almalaurea-filter";
         select.style.width = "100%";
-        select.style.padding = "5px";
-        
-        div.appendChild(label);
+        select.style.padding = ".5em";
+		select.required = true;
         div.appendChild(select);
-        container.appendChild(div);
+        
         return select;
     };
 
-    const corstipoSelect = createSelect("almalaurea-corstipo", "Tipo di corso");
-    const facoltaSelect = createSelect("almalaurea-facolta", "Facoltà / Dipartimento");
-    const postcorsoSelect = createSelect("almalaurea-postcorso", "Corso di laurea");
-
-    const populateDropdown = (select, items, placeholder) => {
-        select.innerHTML = `<option value="">-- Seleziona ${placeholder} --</option>`;
+	const populateSelect = (select, items, placeholder) => {
+        select.innerHTML = `<option value="" invalid selected>- Seleziona ${placeholder} -</option>`;
         items.forEach(item => {
             const option = document.createElement("option");
             option.value = item;
@@ -461,65 +437,253 @@ function drawAlmalaureaFilters(container) {
         });
     };
 
-    // Initial population
-    const corstipi = [...new Set(almaLaureaData.map(d => d.corstipo))];
-    populateDropdown(corstipoSelect, corstipi, "un tipo di corso");
+    const corstipoSelect = createSelect("upp-almalaurea-corstipo", "Tipo di corso");
+    const facoltaSelect = createSelect("upp-almalaurea-facolta", "Facoltà / Dipartimento");
+    const postcorsoSelect = createSelect("upp-almalaurea-postcorso", "Corso di laurea");
 
-    // Event Listeners
+    const corstipoItems = [...new Set(almaLaureaData.map(d => d.corstipo))];
+    populateSelect(corstipoSelect, corstipoItems, "un tipo di corso");
+
     corstipoSelect.addEventListener("change", () => {
-        const selectedCorstipo = corstipoSelect.value;
-        const filteredByCorso = almaLaureaData.filter(d => d.corstipo === selectedCorstipo);
-        const facolta = [...new Set(filteredByCorso.map(d => d.facolta))];
-        populateDropdown(facoltaSelect, facolta, "una facoltà");
-        populateDropdown(postcorsoSelect, [], "un corso di laurea");
-        clearAlmalaureaStats();
+		const selectedCorstipo = corstipoSelect.value;
+		facoltaSelect.innerHTML = "";
+		postcorsoSelect.innerHTML = "";
+		clearAlmalaureaStats();
+		if (selectedCorstipo == "") { return; }
+
+        const filteredAlmaLaureaData = almaLaureaData.filter(d => d.corstipo === selectedCorstipo);
+        const facoltaItems = [...new Set(filteredAlmaLaureaData.map(d => d.facolta))];
+        populateSelect(facoltaSelect, facoltaItems, "una facoltà / dipartimento");
     });
 
     facoltaSelect.addEventListener("change", () => {
         const selectedCorstipo = corstipoSelect.value;
         const selectedFacolta = facoltaSelect.value;
-        const filtered = almaLaureaData.filter(d => d.corstipo === selectedCorstipo && d.facolta === selectedFacolta);
-        const postcorsi = [...new Set(filtered.map(d => d.postcorso))];
-        populateDropdown(postcorsoSelect, postcorsi, "un corso di laurea");
-        clearAlmalaureaStats();
+		clearAlmalaureaStats();
+		postcorsoSelect.innerHTML = "";
+		if (selectedFacolta == "") { return; }
+
+        const filteredAlmaLaureaData = almaLaureaData.filter(d => d.corstipo === selectedCorstipo && d.facolta === selectedFacolta);
+        const postcorsoItems = [...new Set(filteredAlmaLaureaData.map(d => d.postcorso))];
+        populateSelect(postcorsoSelect, postcorsoItems, "un corso di laurea");
     });
 
     postcorsoSelect.addEventListener("change", () => {
         const selectedCorstipo = corstipoSelect.value;
         const selectedFacolta = facoltaSelect.value;
         const selectedPostcorso = postcorsoSelect.value;
+		if (selectedPostcorso == "") { 
+			clearAlmalaureaStats();
+			return;
+		}
         
-        selectedAlmalaureaProfile = almaLaureaData.find(d => 
+        global.selectedAlmalaureaStats = almaLaureaData.find(d => 
             d.corstipo === selectedCorstipo && 
             d.facolta === selectedFacolta && 
             d.postcorso === selectedPostcorso
         );
-        
-        displayAlmalaureaStats();
-        updateMetrics(); // To redraw chart with the new line
+		updateAlmalaureaStats();
     });
 }
 
-function displayAlmalaureaStats() {
-    if (selectedAlmalaureaProfile) {
-        const stats = selectedAlmalaureaProfile;
-		almalaureaVotoEsamiValue.textContent = stats.voto_esami_medio;
-		almalaureaVotoFinaleValue.textContent = stats.voto_finale_medio;
-		almalaureaEtaAllaLaureaValue.textContent = stats.eta_alla_laurea_media;
-		almalaureaDurataStudiValue.textContent = stats.durata_studi_media;
-		almalaureaStatsText.textContent = "Statistiche basate su " + stats.numero_laureati + " laureati nel 2024"
-    } else {
-        clearAlmalaureaStats();
-    }
+function clearAlmalaureaStats() {
+	GUI.almalaureaVotoEsamiValue.textContent = "-";
+	GUI.almalaureaVotoFinaleValue.textContent = "-";
+	GUI.almalaureaEtaAllaLaureaValue.textContent = "-";
+	GUI.almalaureaDurataStudiValue.textContent = "-";
+    GUI.almalaureaStatsBottomText.textContent = "Seleziona un corso di laurea per visualizzane le statistiche";
+    if (global.selectedAlmalaureaStats != null) {
+		global.selectedAlmalaureaStats = null;
+		updateGUI(); // Delete the average line
+	} 
 }
 
+function updateAlmalaureaStats() {
+	const stats = global.selectedAlmalaureaStats;
+	
+	// If any of the stats are null, the degree program does
+	//  not have enough graduates to compute meaningful stats
+	if (Object.values(stats).some(value => value == null)) {
+		clearAlmalaureaStats();
+		GUI.almalaureaStatsBottomText.textContent = "Il corso selezionato ha avuto troppi pochi laureati nel 2024 (" + stats.numero_laureati + ")";	
+	}
+	else {
+		GUI.almalaureaVotoEsamiValue.textContent = stats.voto_esami_medio;
+		GUI.almalaureaVotoFinaleValue.textContent = stats.voto_finale_medio;
+		GUI.almalaureaEtaAllaLaureaValue.textContent = stats.eta_alla_laurea_media;
+		GUI.almalaureaDurataStudiValue.textContent = stats.durata_studi_media;
+		GUI.almalaureaStatsBottomText.textContent = "Statistiche basate su " + stats.numero_laureati + " laureati nel 2024";
+		updateGUI(); // Re-draw the new average line
+	}
+}
+
+function updateGUI() {
+	const exams = computeExcludedCredits(
+		global.parsedExams,
+		global.extensionSettings.exclusionPolicy,
+		global.extensionSettings.exclusionValue
+	)
+	const selectedAcademicYear = updateAcademicYearFilter();
+	const filteredExams = filterExamsByAcademicYear(exams, selectedAcademicYear);
+	const userStats = computeUserStats(
+		filteredExams,
+		global.extensionSettings.honorsValue,
+		global.extensionSettings.exclusionPolicy,
+		global.extensionSettings.exclusionValue
+	);
+	const finalGradePrediction = predictFinalGradeWith95PI(userStats.almaLaureaAverage);
+	const scatterData = computeScatterData(filteredExams, global.extensionSettings.honorsValue);
+
+	GUI.arithmeticAverageValue.textContent = userStats.arithmeticAverage;
+	GUI.weightedAverageValue.textContent = userStats.weightedAverage;
+	GUI.finalGradePredictionValue.textContent = finalGradePrediction.value >= 110.5 ? "110L" : Math.round(finalGradePrediction.value);
+	GUI.finalGradePredictionValuePI.textContent = "±" + Math.round(finalGradePrediction.predictionInterval);
+	
+	updateCreditsProgressBar(
+		userStats.validCredits + userStats.excludedCredits,
+		global.extensionSettings.programDuration
+	);
+	updateGradeDistributionChart(userStats.gradeDistribution, global.extensionSettings.honorsValue);
+	updateExamsChart(scatterData);
+}
+
+function updateAcademicYearFilter() {
+	const selectedExams = global.parsedExams.filter(exam => exam.checkbox.checked === true);
+	const academicYears = [...new Set(
+		selectedExams.map(exam => dateToAcademicYear(exam.date))
+	)].sort();
+
+    const previousValue = GUI.academicYearFilter.value;
+
+    // Remove all current options
+    GUI.academicYearFilter.innerHTML = "";
+
+    // Create the "all" option
+    let allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "Tutti gli anni";
+    GUI.academicYearFilter.appendChild(allOption);
+
+    // Create options for each academic year
+    academicYears.forEach(year => {
+        let option = document.createElement("option");
+        option.value = year;
+        option.textContent = year;
+        GUI.academicYearFilter.appendChild(option);
+    });
+
+    // Restore previous selection if possible, otherwise fallback to "all"
+    if ([...GUI.academicYearFilter.options].some(opt => opt.value === previousValue)) {
+        GUI.academicYearFilter.value = previousValue;
+    } else {
+        GUI.academicYearFilter.value = "all";
+    }
+
+	return GUI.academicYearFilter.value;
+}
+
+/**
+ * Determines the academic year (e.g., "2024/2025") in which a given date falls.
+ * An academic year runs from October 1st to September 31st
+ */
+function dateToAcademicYear(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0-indexed (October is 9)
+    const startYear = month >= 9 ? year : year - 1;
+    return `${startYear}/${startYear + 1}`;
+}
+
+function computeExcludedCredits(exams, exclusionPolicy, exclusionValue) {
+	// Sort a copy of the exams array
+	exams = Array.from(exams).sort((a, b) => {
+		// If the grade is the same, sort by credits descending
+		if (a.grade === b.grade) { return b.credits - a.credits; }
+		// Otherwise sort by grade ascending
+		return a.grade - b.grade;
+	});	
+
+	exams.forEach(exam => {
+		if (isNaN(exam.grade)) { 
+			exam.excludedCredits = exam.credits;
+			return;
+		}
+		if (exclusionValue <= 0 || exclusionPolicy == "none") { 
+			exam.excludedCredits = 0;
+			return;
+		}
+		if (exclusionPolicy == "exams") {
+			exclusionValue--;
+			exam.excludedCredits = exam.credits;
+		}
+		if (exclusionPolicy == "credits") {
+			let excludedCredits = Math.min(exclusionValue, exam.credits);
+			exclusionValue -= excludedCredits;
+			exam.excludedCredits = excludedCredits;
+		}
+	});
+
+	return exams;
+}
+
+function computeUserStats(exams, honorsValue) {
+	let validCredits = 0;
+	let excludedCredits = 0;
+	let validExamsCount = 0;
+	let excludedExamsCount = 0;
+	let totalWeighted = 0;
+	let totalArithmetic = 0;
+	let totalAlmaLaurea = 0;
+
+	let gradeDistribution = {};
+	for (let i = 18; i <= 31; i++) { gradeDistribution[i] = 0; }
+
+	exams.forEach(exam => {
+		excludedCredits += exam.excludedCredits;
+		let examValidCredits = exam.credits - exam.excludedCredits;
+		if (examValidCredits <= 0) {
+			excludedExamsCount++;
+			return;
+		}
+		validExamsCount++;
+		validCredits += examValidCredits;
+
+		let examGrade = exam.grade === 31 ? honorsValue : exam.grade;
+		totalArithmetic += examGrade;
+		totalWeighted += examGrade * examValidCredits;
+		totalAlmaLaurea += examGrade > 30 ? 30 : examGrade;
+		
+		gradeDistribution[exam.grade]++;
+	});
+
+	const weightedAverageRaw = validCredits > 0 ? (totalWeighted / validCredits) : 0;
+	const arithmeticAverageRaw = validExamsCount > 0 ? (totalArithmetic / validExamsCount) : 0;
+	const almaLaureaAverageRaw = validExamsCount > 0 ? (totalAlmaLaurea / validExamsCount) : 0;
+
+	return {
+		arithmeticAverage: arithmeticAverageRaw.toFixed(2),
+		weightedAverage: weightedAverageRaw.toFixed(2),
+		almaLaureaAverage: almaLaureaAverageRaw.toFixed(2),
+		validCredits,
+		excludedCredits,
+		validExamsCount,
+		excludedExamsCount,
+		gradeDistribution
+	};
+}
+
+/**
+ * Returns a sorted list of exams that are checked and match the slected academic year
+ */ 
+function filterExamsByAcademicYear(exams, academicYear) {
+    const filteredExams = exams.filter(exam => {
+        if (!exam.checkbox.checked) { return false; }
+        if (academicYear === "all") { return true; }
+        return dateToAcademicYear(exam.date) === academicYear;
+    });
+    return filteredExams.sort((a, b) => a.date - b.date);
+}
 
 function predictFinalGradeWith95PI(almaLaureaAverage) {
-	if (almaLaureaAverage < 18 || almaLaureaAverage > 30) {
-		console.error("Unable to predict the final grade with an almaLaureaAverage of " + almaLaureaAverage);
-		return { value: NaN, predictionInterval: NaN }
-	}
-
 	// [ y = x^2 * a + x * b + c ] (Quadratic model)
 	const a = -0.27050574;
     const b = 17.42744807;
@@ -543,114 +707,106 @@ function predictFinalGradeWith95PI(almaLaureaAverage) {
 	};
 }
 
+function computeScatterData(exams, honorsValue) {	
+	const scatterPoints = [];
+	exams.forEach(exam => {
+		if (isNaN(exam.grade)) { return; }
+		scatterPoints.push({
+			x: exam.date,
+			y: exam.grade === 31 ? honorsValue : exam.grade,
+			validCredits: exam.credits - exam.excludedCredits,
+			name: exam.name,
+			gradeText: exam.grade === 31 ? "30L" : exam.grade,
+			creditsText: exam.excludedCredits === 0 ? exam.credits : exam.credits + " (" + exam.excludedCredits + " non conteggiati)"
+		});
+	});
 
-function clearAlmalaureaStats() {
-    selectedAlmalaureaProfile = null;
-    almalaureaStatsText.textContent = "Seleziona un corso di laurea per visualizzarne le statistiche";
-    updateMetrics(); // Redraw chart without the line
-}
-// --- End of New Code ---
+    scatterPoints.sort((a, b) => a.x - b.x);
 
-// Returns a sorted list of exams that are checked and match the year filter
-function getFilteredExams() {
-    const selectedYear = document.getElementById("year-filter").value;
-    
-    const filtered = exams.filter(exam => {
-        if (!exam.checkbox.checked) {
-            return false;
-        }
-        if (selectedYear === "all") {
-            return true;
-        }
-        return getAcademicYear(exam.date) === selectedYear;
-    });
+	const averageLines = [];
+	let runningCredits = 0;
+	let runningWeighted = 0;
+	let runningTotal = 0;
 
-    return filtered.sort((a, b) => a.date - b.date); // Sort by date
-}
+	scatterPoints.forEach((point, index) => {
+		runningCredits += point.validCredits;
+		runningWeighted += point.y * point.validCredits;
+		runningTotal += point.y;
+		
+		averageLines.push({
+			x: point.x,
+			weightedAverage: runningWeighted / runningCredits,
+			arithmeticAverage: runningTotal / (index + 1)
+		});
+	});
 
-function updateMetrics() {
-	const metrics = computeMetrics();
-	const scatterData = computeScatterData();
-	
-	let prediction = predictFinalGradeWith95PI(metrics.almaLaureaAverage);
-
-	weightedAverageValue.textContent = metrics.weightedAverage;
-	averageValue.textContent = metrics.average;
-	gradePredictionValue.textContent = prediction.value >= 110.5 ? "110L" : Math.round(prediction.value);
-	gradePredictionValueCI.textContent = "±" + Math.round(prediction.predictionInterval);
-	
-	updateProgressBar(metrics.totalCFU);
-	updateHistogram(metrics.gradeDistribution);
-	updateTimeChart(scatterData);
+	return {
+		scatterPoints,
+		averageLines
+	};
 }
 
-function updateProgressBar(achievedECTS, totalECTS=180) {
-	// FIXME: così suitable è sempre in ogni anno lol
-	let precentage = Math.round((achievedECTS + suitableECTS) / totalECTS * 100);
-	let cfu_text = (achievedECTS + suitableECTS) + "/" + totalECTS + " CFU";
+function updateCreditsProgressBar(achievedCredits, totalCredits) {
+	let precentage = Math.round(achievedCredits / totalCredits * 100);
+	let creditsText = achievedCredits + "/" + totalCredits + " CFU";
 	
-	ECTSprogressTextLeft.textContent = "";
-	ECTSprogressTextRight.textContent = "";
-	ECTSprogressTextLeftmost.textContent = "";
-	ECTSprogressTextRightmost.textContent = "";
-	ECTSprogressTextRight.style.position = "absolute";
-
-	ECTSprogress.style.width = precentage + "%";
+	GUI.creditsProgressTextLeft.textContent = "";
+	GUI.creditsProgressTextRight.textContent = "";
+	GUI.creditsProgressTextLeftmost.textContent = "";
+	GUI.creditsProgressTextRightmost.textContent = "";
+	GUI.creditsProgressTextRight.style.position = "absolute";
+	GUI.creditsProgress.style.width = precentage + "%";
 
 	if (precentage < 15) {
-		ECTSprogressTextRight.textContent = precentage + " %";
-		ECTSprogressTextRight.style.position = "relative";
-		ECTSprogressTextRightmost.textContent = cfu_text;
+		GUI.creditsProgressTextRight.textContent = precentage + " %";
+		GUI.creditsProgressTextRight.style.position = "relative";
+		GUI.creditsProgressTextRightmost.textContent = creditsText;
 	}
 	else if (precentage < 50) {
-		ECTSprogressTextLeft.textContent = precentage + " %";
-		ECTSprogressTextRightmost.textContent = cfu_text;
-	}
-	else if (precentage < 80) {
-		ECTSprogressPercentage.textContent = cfu;
-		ECTSprogressTextLeftmost.textContent = cfu_text;
+		GUI.creditsProgressTextLeft.textContent = precentage + " %";
+		GUI.creditsProgressTextRightmost.textContent = creditsText;
 	}
 	else {
-		ECTSprogressTextLeft.textContent = precentage + " % ";
-		ECTSprogressTextLeftmost.textContent = cfu_text;
+		GUI.creditsProgressTextLeft.textContent = precentage + " % ";
+		GUI.creditsProgressTextLeftmost.textContent = creditsText;
 	}
 }
 
-function updateHistogram(gradeDistribution) {
-	const ctx = histogramCanvas.getContext('2d');
+function updateGradeDistributionChart(gradeDistribution, honorsValue) {
+	const ctx = GUI.gradeDistributionCanvas.getContext("2d");
 	
-	if (distributionChart) {
-		distributionChart.destroy();
+	if (GUI.gradeDistributionChart) {
+		GUI.gradeDistributionChart.destroy();
 	}
 
 	const labels = [];
-	const data = [];
+	const distribution = [];
 	const backgroundColors = [];
 
-	// Add regular grades (18-30)
 	for (let i = 18; i <= 30; i++) {
 		labels.push(i.toString());
-		data.push(gradeDistribution[i]);
-		// Color gradient from red to green
-		const intensity = (i - 18) / 12;
-		backgroundColors.push(`rgba(${255 - Math.floor(intensity * 255)}, ${Math.floor(intensity * 255)}, 50, 0.7)`);
+		distribution.push(gradeDistribution[i]);
+		backgroundColors.push(computeExamColor(i));
 	}
 
-	// Add 30L
-	labels.push('30L');
-	data.push(gradeDistribution['30L']);
-	backgroundColors.push('rgba(255, 215, 0, 0.8)'); // Gold color for honors
-
-	distributionChart = new Chart(ctx, {
-		type: 'bar',
+	if (honorsValue > 30) {
+		labels.push("30L");
+		distribution.push(gradeDistribution[31]);
+		backgroundColors.push(computeExamColor(31));
+	}
+	else {
+		distribution[distribution.length - 1] = gradeDistribution[31];
+	}
+	
+	GUI.gradeDistributionChart = new Chart(ctx, {
+		type: "bar",
 		data: {
 			labels: labels,
 			datasets: [{
-				label: 'Numero di esami',
-				data: data,
+				data: distribution,
 				backgroundColor: backgroundColors,
-				borderColor: backgroundColors.map(color => color.replace('0.7', '1').replace('0.8', '1')),
-				borderWidth: 1
+				borderColor: backgroundColors.map(computeBorderColor),
+				borderWidth: 3
 			}]
 		},
 		options: {
@@ -659,91 +815,81 @@ function updateHistogram(gradeDistribution) {
 			scales: {
 				y: {
 					beginAtZero: true,
-					ticks: {
-						stepSize: 1
-					}
+					ticks: { stepSize: 1 }
 				}
 			},
-			plugins: {
-				legend: {
-					display: false
-				}
-			}
+			plugins: { legend: { display: false } }
 		}
 	});
 }
-function updateTimeChart(scatterData) {
-    const ctx = timeSeriesCanvas.getContext('2d');
-    
-    if (timeChart) {
-        timeChart.destroy();
-    }
 
-    if (scatterData.scatterPoints.length === 0) {
-        return;
+function computeExamColor(grade) {
+	if (grade > 30) { return "rgba(255, 215, 0, 0.5)"; }
+	const intensity = (grade - 18) / 12;
+	return `rgba(${255 - Math.floor(intensity * 255)}, ${Math.floor(intensity * 255)}, 50, 0.5)`;
+}
+
+function computeBorderColor(examColor) {
+	return examColor.replace("0.5", "1");	
+}
+
+function updateExamsChart(scatterData) {
+    const ctx = GUI.examsCanvas.getContext("2d");
+    
+    if (GUI.examsChart) {
+        GUI.examsChart.destroy();
     }
 
     const datasets = [
-        // Scatter plot for individual exam grades
+		// Scatter points
         {
-            label: 'Esami',
+            label: "Esami",
             data: scatterData.scatterPoints,
-            type: 'scatter',
-            backgroundColor: function(context) {
-                const point = context.parsed;
-                if (point.y > 30) return 'rgba(255, 215, 0, 0.8)'; // Gold for 30L
-                // Color gradient from red to green based on grade
-                const intensity = (point.y - 18) / 12;
-                return `rgba(${255 - Math.floor(intensity * 255)}, ${Math.floor(intensity * 255)}, 50, 0.8)`;
-            },
-            borderColor: function(context) {
-                const point = context.parsed;
-                if (point.y > 30) return 'rgba(255, 215, 0, 1)'; // Gold for 30L
-                const intensity = (point.y - 18) / 12;
-                return `rgba(${255 - Math.floor(intensity * 255)}, ${Math.floor(intensity * 255)}, 50, 1)`;
-            },
-            borderWidth: 2,
+            type: "scatter",
+            backgroundColor: (context) => computeExamColor(context.parsed.y),
+    		borderColor: (context) => computeBorderColor(computeExamColor(context.parsed.y)),
+            borderWidth: 3,
             pointRadius: 6,
             pointHoverRadius: 8
         },
         // Weighted average line
         {
-            label: 'Media ponderata',
+            label: "Media ponderata",
             data: scatterData.averageLines.map(point => ({
                 x: point.x,
                 y: point.weightedAverage
             })),
-            type: 'line',
-            borderColor: 'rgba(37, 99, 235, 1)',
-            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            type: "line",
+            borderColor: "rgba(37, 99, 235, 1)",
+            backgroundColor: "rgba(37, 99, 235, 0.5)",
             borderWidth: 3,
             fill: false,
-            tension: 0.1,
+            tension: 0.2,
             pointRadius: 0,
-            pointHoverRadius: 5
+            pointHoverRadius: 0
         },
         // Arithmetic average line
         {
-            label: 'Media aritmetica',
+            label: "Media aritmetica",
             data: scatterData.averageLines.map(point => ({
                 x: point.x,
                 y: point.arithmeticAverage
             })),
-            type: 'line',
-            borderColor: 'rgba(172, 38, 220, 1)',
-            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+            type: "line",
+            borderColor: "rgba(172, 38, 220, 1)",
+            backgroundColor: "rgba(205, 38, 220, 0.5)",
             borderWidth: 3,
             fill: false,
-            tension: 0.1,
+            tension: 0.2,
             pointRadius: 0,
-            pointHoverRadius: 5,
-            borderDash: [5, 5] // Dashed line to distinguish from weighted average
+            pointHoverRadius: 0,
+            borderDash: [5, 5]
         }
     ];
     
-    // Add AlmaLaurea average grade line if a profile is selected
-    if (selectedAlmalaureaProfile && scatterData.scatterPoints.length > 0) {
-        const averageGrade = selectedAlmalaureaProfile.voto_esami_medio;
+    // Add AlmaLaurea average line
+    if (global.selectedAlmalaureaStats) {
+        const averageGrade = global.selectedAlmalaureaStats.voto_esami_medio;
         const firstDate = scatterData.scatterPoints[0].x;
         const lastDate = scatterData.scatterPoints[scatterData.scatterPoints.length - 1].x;
 
@@ -753,19 +899,19 @@ function updateTimeChart(scatterData) {
                 { x: firstDate, y: averageGrade },
                 { x: lastDate, y: averageGrade }
             ],
-            type: 'line',
-            borderColor: 'rgba(65, 65, 65, 1)',
-            borderWidth: 2,
+            type: "line",
+            borderColor: "rgba(65, 65, 65, 1)",
+            borderWidth: 3,
             pointRadius: 0,
+            pointHoverRadius: 0,
             fill: false,
-            borderDash: [8, 4]
+            borderDash: [5, 5]
         });
     }
 
-    // --- Start of New Code ---
     // Plugin to draw vertical lines at the beginning of each year
     const yearDividerPlugin = {
-        id: 'yearDivider',
+        id: "yearDivider",
         afterDatasetsDraw(chart) {
             const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
 
@@ -774,10 +920,9 @@ function updateTimeChart(scatterData) {
             const endYear = new Date(x.max).getFullYear();
 
             ctx.save();
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
             ctx.lineWidth = 1;
 
-            // Loop from the year *after* the start year up to the end year
             for (let year = startYear + 1; year <= endYear; year++) {
                 // Get the pixel position for January 1st of the current year
                 const lineDate = new Date(year, 0, 1);
@@ -793,18 +938,14 @@ function updateTimeChart(scatterData) {
             ctx.restore();
         }
     };
-    // --- End of New Code ---
 
-    timeChart = new Chart(ctx, {
-        type: 'scatter',
+    GUI.examsChart = new Chart(ctx, {
+        type: "scatter",
         data: { datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'point'
-            },
+            interaction: { intersect: false, mode: "point" },
             plugins: {
                 tooltip: {
                     filter: function(tooltipItem) {
@@ -813,162 +954,36 @@ function updateTimeChart(scatterData) {
                     },
                     callbacks: {
                         title: function(context) {
-                            const dataIndex = context[0].dataIndex;
-                            const point = scatterData.scatterPoints[dataIndex];
-                            return point.exam;
+							const point = context[0].raw;
+							return point.name || "";
                         },
                         label: function(context) {
-                            const dataIndex = context.dataIndex;
-                            const point = scatterData.scatterPoints[dataIndex];
-                            const gradeDisplay = point.originalGrade === HONORS_VALUE ? '30L' : point.originalGrade;
-                            return [
-                                `Voto: ${gradeDisplay}`,
-                                `CFU: ${point.ects}`,
-                                `Data: ${point.x.toLocaleDateString('it-IT')}`
-                            ];
+							const point = context.raw;
+							return [
+								`Voto: ${point.gradeText}`,
+								`CFU: ${point.creditsText}`,
+								`Data: ${point.x.toLocaleDateString("it-IT")}`
+							];
                         }
                     }
                 },
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: "top"
                 }
             },
             scales: {
                 x: {
-                    type: 'time',
+                    type: "time",
                     time: {
-                        unit: 'month',
-                        displayFormats: {
-                            day: 'dd/MM/yy'
-                        }
+                        unit: "month",
+                        displayFormats: { day: "dd/MM/yy" }
                     }
                 },
-                y: {
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
+                y: { ticks: { stepSize: 1 } }
             }
         },
-        // --- Start of New Code ---
         // Register the custom plugin with the chart instance
         plugins: [yearDividerPlugin]
-        // --- End of New Code ---
     });
-}
-
-function computeMetrics() {
-	const filteredExams = getFilteredExams();
-
-	let totalCFU = 0;
-	let totalWeighted = 0;
-	let totalAlmaLaurea = 0;
-	let total = 0;
-	let examsPassed = 0;
-	let gradeDistribution = {};
-
-	// Initialize grade distribution
-	for (let i = 18; i <= 30; i++) {
-		gradeDistribution[i] = 0;
-	}
-	gradeDistribution["30L"] = 0;
-
-	// First pass to calculate totals
-	filteredExams.forEach(exam => {
-		totalCFU += exam.ects;
-		totalWeighted += exam.grade * exam.ects;
-		totalAlmaLaurea += exam.grade > 30 ? 30 : exam.grade;
-		total += exam.grade;
-		examsPassed++;
-		
-		// Count grade distribution
-		if (exam.grade === HONORS_VALUE) {
-			gradeDistribution["30L"]++;
-		} else {
-			gradeDistribution[exam.grade]++;
-		}
-	});
-
-	const weightedAverageRaw = totalCFU > 0 ? (totalWeighted / totalCFU) : 0;
-	const averageRaw = examsPassed > 0 ? (total / examsPassed) : 0;
-	const almaLaureaAverageRaw = examsPassed > 0 ? (totalAlmaLaurea / examsPassed) : 0;
-
-	// Second pass to calculate weighted standard deviation
-    let sumOfWeightedSquaredDiffs = 0;
-    filteredExams.forEach(exam => {
-        sumOfWeightedSquaredDiffs += exam.ects * Math.pow(exam.grade - weightedAverageRaw, 2);
-    });
-	
-	const weightedVariance = totalCFU > 0 ? (sumOfWeightedSquaredDiffs / totalCFU) : 0;
-    const stdDeviation = Math.sqrt(weightedVariance);
-
-	return {
-		average: averageRaw.toFixed(2),
-		weightedAverage: weightedAverageRaw.toFixed(2),
-		almaLaureaAverage: almaLaureaAverageRaw.toFixed(2),
-		stdDeviation: stdDeviation.toFixed(2),
-		totalCFU,
-		examsPassed,
-		gradeDistribution
-	};
-}
-
-function computeScatterData() {
-	const checkedExams = getFilteredExams();
-	
-	// Group exams by date to handle visual shifting for same-date exams
-	const examsByDate = {};
-	checkedExams.forEach(exam => {
-		const dateKey = exam.date.toDateString();
-		if (!examsByDate[dateKey]) {
-			examsByDate[dateKey] = [];
-		}
-		examsByDate[dateKey].push(exam);
-	});
-
-	// Create scatter points with visual shifting for same-date exams
-	const scatterPoints = [];
-	Object.entries(examsByDate).forEach(([dateKey, dateExams]) => {
-		dateExams.forEach((exam, index) => {
-			// Add slight time offset for visual separation (in milliseconds)
-			const offsetHours = (index - Math.floor(dateExams.length / 2)) * 2; // 2 hours apart
-			const adjustedDate = new Date(exam.date.getTime() + offsetHours * 60 * 60 * 1000);
-			
-			scatterPoints.push({
-				x: adjustedDate,
-				y: exam.grade,
-				exam: exam.exam,
-				originalGrade: exam.grade,
-				ects: exam.ects
-			});
-		});
-	});
-    
-    // Re-sort points by adjusted date for correct line drawing
-    scatterPoints.sort((a, b) => a.x - b.x);
-
-	// Calculate running averages for the line charts
-	const averageLines = [];
-	let runningCFU = 0;
-	let runningWeighted = 0;
-	let runningTotal = 0;
-
-    // Use the original sorted list for calculating running average to maintain logical order
-	checkedExams.forEach((exam, index) => {
-		runningCFU += exam.ects;
-		runningWeighted += exam.grade * exam.ects;
-		runningTotal += exam.grade;
-		
-		averageLines.push({
-			x: exam.date,
-			weightedAverage: runningWeighted / runningCFU,
-			arithmeticAverage: runningTotal / (index + 1)
-		});
-	});
-
-	return {
-		scatterPoints,
-		averageLines
-	};
 }
