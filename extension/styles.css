@@ -1,13 +1,6 @@
 
 /* All classes are prefixed with "upp" (UniPi++) to avoid conflicts with the website's own CSS */
 
-.upp-checkbox {
-    margin-right: 5px !important;
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-}
-
 .upp-almalaurea-filter:invalid { 
     color: gray; 
 }

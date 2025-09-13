@@ -1,4 +1,11 @@
 
+const DEFAULT_SETTINGS = {
+    honorsValue: 33,
+    programDuration: 180,
+    exclusionPolicy: "none",
+    exclusionValue: 0
+};
+
 function parseNewSettings() {
     let honorsValueStr = document.querySelector("#honorsValue").value;
     let honorsValue = parseInt(honorsValueStr, 10) || DEFAULT_SETTINGS.honorsValue;

@@ -1,6 +1,5 @@
 
 /**
- * timeout di 3s è unreliable asf
  * fare i dati almalaurea in inglese?
  * persistenza dei dati (magari divisi per matricola sarebbe top)
  * layout responsive
@@ -9,22 +8,11 @@
 
 "use strict";
 
-setTimeout(init, 3000);
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-	if (areaName === "local") {
-		global.extensionSettings = changes.settings.newValue;
-		updateGUI();
-	}
-});
-
 // Global variables
 const global = {
 	selectedAlmalaureaStats: null,
-	extensionSettings: DEFAULT_SETTINGS,
-	suitableCredits: 0, 
+	extensionSettings: {},
 	parsedExams: []
-
 }
 
 // GUI elements
@@ -59,25 +47,59 @@ const GUI = {
     almalaureaStatsBottomText: null
 };
 
+init();
 async function init() {
+	drawLayout();
+
 	const localStorageQueryResult = await chrome.storage.local.get("settings");
 	global.extensionSettings = localStorageQueryResult.settings;
-	
+
+	const spinnerSelector = "#floating > div.footable-loader";
+	await waitForElementToAppear(spinnerSelector);
+	await waitForElementToDisappear(spinnerSelector);
+	await new Promise(r => setTimeout(r, 100)); // Just to be sure...
+
 	const table = document.querySelector("#tableLibretto");
-	if (table == null) { return; } // The user is in the career selection page
 	const tbody = table.querySelector("tbody");
 	const rows = tbody.querySelectorAll("tr");
 
 	insertCheckboxes(rows);
 	global.parsedExams = parseExams(rows);
-	drawLayout();
+	
 	updateGUI();
 
-	// Add listeners to the checkboxes
-	tbody.querySelectorAll(`input[type=checkbox].upp-checkbox`).forEach(cb => {
-		cb.addEventListener("change", () => {
+	// If the user changes any option in the extension's popup, update the GUI
+	chrome.storage.onChanged.addListener((changes, areaName) => {
+		if (areaName === "local") {
+			global.extensionSettings = changes.settings.newValue;
 			updateGUI();
+		}
+	});
+}
+
+function waitForElementToAppear(selector) {
+	return new Promise(resolve => {
+		if (document.querySelector(selector)) { return resolve(); }
+		const observer = new MutationObserver(() => {
+			if (document.querySelector(selector)) {
+				observer.disconnect();
+				resolve();
+			}
 		});
+		observer.observe(document.body, { childList: true, subtree: true });
+	});
+}
+
+function waitForElementToDisappear(selector) {
+	return new Promise(resolve => {
+		if (!document.querySelector(selector)) { return resolve(); }
+		const observer = new MutationObserver(() => {
+			if (!document.querySelector(selector)) {
+				observer.disconnect();
+				resolve();
+			}
+		});
+		observer.observe(document.body, { childList: true, subtree: true });
 	});
 }
 
@@ -87,12 +109,16 @@ function insertCheckboxes(rows) {
 		checkbox.type = "checkbox";
 		checkbox.name = "includeInAverage";
 		checkbox.className = "upp-checkbox";
-
-		// False by default
+		checkbox.style.marginRight = "5px";
+		checkbox.style.width = "16px";
+		checkbox.style.height = "16px";
+		checkbox.style.cursor = "pointer";
 		checkbox.checked = false;
 
 		// Insert the checkbox left to the exam name
 		row.firstElementChild.insertBefore(checkbox, row.firstElementChild.firstElementChild)
+
+		checkbox.addEventListener("change", updateGUI);
 	});
 }
 
@@ -523,7 +549,7 @@ function updateGUI() {
 		global.extensionSettings.exclusionPolicy,
 		global.extensionSettings.exclusionValue
 	)
-	const selectedAcademicYear = updateAcademicYearFilter();
+	const selectedAcademicYear = updateAcademicYearFilter(global.parsedExams);
 	const filteredExams = filterExamsByAcademicYear(exams, selectedAcademicYear);
 	const userStats = computeUserStats(
 		filteredExams,
@@ -544,11 +570,11 @@ function updateGUI() {
 		global.extensionSettings.programDuration
 	);
 	updateGradeDistributionChart(userStats.gradeDistribution, global.extensionSettings.honorsValue);
-	updateExamsChart(scatterData);
+	updateExamsChart(scatterData, global.selectedAlmalaureaStats);
 }
 
-function updateAcademicYearFilter() {
-	const selectedExams = global.parsedExams.filter(exam => exam.checkbox.checked === true);
+function updateAcademicYearFilter(exams) {
+	const selectedExams = exams.filter(exam => exam.checkbox.checked === true);
 	const academicYears = [...new Set(
 		selectedExams.map(exam => dateToAcademicYear(exam.date))
 	)].sort();
@@ -671,9 +697,6 @@ function computeUserStats(exams, honorsValue) {
 	};
 }
 
-/**
- * Returns a sorted list of exams that are checked and match the slected academic year
- */ 
 function filterExamsByAcademicYear(exams, academicYear) {
     const filteredExams = exams.filter(exam => {
         if (!exam.checkbox.checked) { return false; }
@@ -833,7 +856,7 @@ function computeBorderColor(examColor) {
 	return examColor.replace("0.5", "1");	
 }
 
-function updateExamsChart(scatterData) {
+function updateExamsChart(scatterData, almaLaureaStats) {
     const ctx = GUI.examsCanvas.getContext("2d");
     
     if (GUI.examsChart) {
@@ -888,8 +911,8 @@ function updateExamsChart(scatterData) {
     ];
     
     // Add AlmaLaurea average line
-    if (global.selectedAlmalaureaStats) {
-        const averageGrade = global.selectedAlmalaureaStats.voto_esami_medio;
+    if (almaLaureaStats) {
+        const averageGrade = almaLaureaStats.voto_esami_medio;
         const firstDate = scatterData.scatterPoints[0].x;
         const lastDate = scatterData.scatterPoints[scatterData.scatterPoints.length - 1].x;
 
@@ -954,6 +977,7 @@ function updateExamsChart(scatterData) {
                     },
                     callbacks: {
                         title: function(context) {
+							if (!context[0]) { return; }
 							const point = context[0].raw;
 							return point.name || "";
                         },
