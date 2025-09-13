@@ -17,7 +17,7 @@
 	"content_scripts": [
 		{
 			"matches": ["https://www.studenti.unipi.it/auth/studente/Libretto/*"],
-			"js": ["scripts/almaLaureaData.js", "scripts/dependencies.js", "scripts/alice.js"],
+			"js": ["scripts/almaLaureaData.js", "scripts/defaultSettings.js", "scripts/dependencies.js", "scripts/alice.js"],
 			"css": ["styles.css"]
 		}
 	]

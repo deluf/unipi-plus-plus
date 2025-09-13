@@ -50,7 +50,11 @@ async function init() {
 
 	let localStorageQueryResult; 
 	localStorageQueryResult = await chrome.storage.local.get("settings");
-	global.extensionSettings = localStorageQueryResult.settings;
+	global.extensionSettings = {
+		...DEFAULT_SETTINGS,
+		...localStorageQueryResult.settings
+	};
+
 	localStorageQueryResult = await chrome.storage.local.get("uncheckedExams");
 	const uncheckedExams = localStorageQueryResult.uncheckedExams ? localStorageQueryResult.uncheckedExams : [];
 	
@@ -133,7 +137,8 @@ function insertCheckboxes(rows, uncheckedExams) {
 }
 
 function parseExams(rows, uncheckedExams) {
-	let parsedExams = []
+	let parsedExams = [];
+	let debug = 18;
 	for (const row of rows) {
 		const cells = row.querySelectorAll("td");
 		const checkbox = cells[0].querySelector("input[type=checkbox].upp-checkbox");
@@ -175,7 +180,8 @@ function parseExams(rows, uncheckedExams) {
 		}
 		
 		// FIXME: Debug - use random grades
-		let gradeTmp = Math.round(Math.random() * 13 + 18)
+		let gradeTmp = debug <= 31 ? debug : Math.round(Math.random() * 13 + 18);
+		debug++;
 		if (isNaN(grade)) { gradeTmp = grade; }
 		
 		if (uncheckedExams.includes(name)) {
@@ -334,13 +340,13 @@ function drawLayout() {
 	almalaureaStatsDiv.style.gridRow = "1";
 	almalaureaStatsDiv.style.gridColumn = "2";
 	mainDiv.appendChild(almalaureaStatsDiv);
-	
+
 			// AlmaLaurea stats -> Title
 	const almalaureaTitle = document.createElement("h3");
-	almalaureaTitle.textContent = "Statistiche medie ateneo (AlmaLaurea)";
+	almalaureaTitle.textContent = "Statistiche medie ateneo";
 	almalaureaTitle.className = "upp-almalaurea-title upp-horizontal-flexbox-center"
 	almalaureaStatsDiv.appendChild(almalaureaTitle);
-	
+
 			// AlmaLaurea stats -> Filters
 	drawAlmalaureaFilters(almalaureaStatsDiv);
 
@@ -552,7 +558,7 @@ function updateAlmalaureaStats() {
 		GUI.almalaureaVotoFinaleValue.textContent = stats.voto_finale_medio;
 		GUI.almalaureaEtaAllaLaureaValue.textContent = stats.eta_alla_laurea_media;
 		GUI.almalaureaDurataStudiValue.textContent = stats.durata_studi_media;
-		GUI.almalaureaStatsBottomText.textContent = "Statistiche basate su " + stats.numero_laureati + " laureati nel 2024";
+		GUI.almalaureaStatsBottomText.textContent = "Statistiche basate su " + stats.numero_laureati + " laureati nel 2024 (AlmaLaurea)";
 		updateGUI(); // Re-draw the new average line
 	}
 }
@@ -749,9 +755,14 @@ function computeScatterData(exams, honorsValue) {
 	exams.forEach(exam => {
 		if (isNaN(exam.grade)) { return; }
 		scatterPoints.push({
+			// Coordinates
 			x: exam.date,
 			y: exam.grade === 31 ? honorsValue : exam.grade,
+			// Running average and color computations
+			originalGrade: exam.grade,
 			validCredits: exam.credits - exam.excludedCredits,
+			excludedCredits: exam.excludedCredits,
+			// Tooltip display values
 			name: exam.name,
 			gradeText: exam.grade === 31 ? "30L" : exam.grade,
 			creditsText: exam.excludedCredits === 0 ? exam.credits : exam.credits + " (" + exam.excludedCredits + " non conteggiati)"
@@ -819,17 +830,20 @@ function updateGradeDistributionChart(gradeDistribution, honorsValue) {
 	const labels = [];
 	const distribution = [];
 	const backgroundColors = [];
+	const borderColors = [];
 
 	for (let i = 18; i <= 30; i++) {
 		labels.push(i.toString());
 		distribution.push(gradeDistribution[i]);
-		backgroundColors.push(computeExamColor(i));
+		backgroundColors.push(computeExamBackgroundColor(i));
+		borderColors.push(computeExamBorderColor(i));
 	}
 
 	if (honorsValue > 30) {
 		labels.push("30L");
 		distribution.push(gradeDistribution[31]);
-		backgroundColors.push(computeExamColor(31));
+		backgroundColors.push(computeExamBackgroundColor(31));
+		borderColors.push(computeExamBorderColor(31));
 	}
 	else {
 		distribution[distribution.length - 1] = gradeDistribution[31];
@@ -842,7 +856,7 @@ function updateGradeDistributionChart(gradeDistribution, honorsValue) {
 			datasets: [{
 				data: distribution,
 				backgroundColor: backgroundColors,
-				borderColor: backgroundColors.map(computeBorderColor),
+				borderColor: borderColors,
 				borderWidth: 3
 			}]
 		},
@@ -860,14 +874,43 @@ function updateGradeDistributionChart(gradeDistribution, honorsValue) {
 	});
 }
 
-function computeExamColor(grade) {
-	if (grade > 30) { return "rgba(255, 215, 0, 0.5)"; }
-	const intensity = (grade - 18) / 12;
-	return `rgba(${255 - Math.floor(intensity * 255)}, ${Math.floor(intensity * 255)}, 50, 0.5)`;
+function computeExamBackgroundColor(grade, excludedCredits = 0) {
+	const alpha = excludedCredits > 0 ? 0 : 128;
+	return computeExamColor(grade, alpha);
 }
 
-function computeBorderColor(examColor) {
-	return examColor.replace("0.5", "1");	
+function computeExamBorderColor(grade) {
+	return computeExamColor(grade, 255);
+}
+
+const colorMapLimits = {
+	interpolateMagma: { scale: 12/13, offset: 0 },
+	interpolateViridis: { scale: 12/13, offset: 0 },
+	interpolateCividis: { scale: 12/13, offset: 0 },
+	interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
+	interpolateRdPu: { scale: 9/13, offset: 4/13 },
+	interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
+	interpolateGreys: { scale: 9/13, offset: 4/13 },
+};
+
+/**
+ * Computes the hex value of the color associated with the specified grade and alpha
+ * - The grade must be in the range [18, 31]
+ * - Alpha must be in the range [0, 255]
+ */
+function computeExamColor(grade, alpha) {
+	const gradeNormalized = (grade - 18) / 13;
+	const limits = colorMapLimits[global.extensionSettings.colorMap];
+	const tone = gradeNormalized * limits.scale + limits.offset;
+	const color = d3[global.extensionSettings.colorMap](tone);
+	if (color.length === 7) {
+		// Color returned in hex format
+		return color + alpha.toString(16).padStart(2, "0");
+	}
+	else {
+		// Color returned in RGB format
+		return color.replace(")", ", " + (alpha/255).toFixed(1) + ")");
+	}
 }
 
 function updateExamsChart(scatterData, almaLaureaStats) {
@@ -883,8 +926,9 @@ function updateExamsChart(scatterData, almaLaureaStats) {
             label: "Esami",
             data: scatterData.scatterPoints,
             type: "scatter",
-            backgroundColor: (context) => computeExamColor(context.parsed.y),
-    		borderColor: (context) => computeBorderColor(computeExamColor(context.parsed.y)),
+            backgroundColor: (context) => computeExamBackgroundColor(
+				context.raw.originalGrade, context.raw.excludedCredits),
+    		borderColor: (context) => computeExamBorderColor(context.raw.originalGrade),
             borderWidth: 3,
             pointRadius: 6,
             pointHoverRadius: 8
