@@ -1,7 +1,6 @@
 
 /**
  * fare i dati almalaurea in inglese?
- * persistenza dei dati (magari divisi per matricola sarebbe top)
  * layout responsive
  * schermata previsione
  * * */
@@ -51,9 +50,12 @@ init();
 async function init() {
 	drawLayout();
 
-	const localStorageQueryResult = await chrome.storage.local.get("settings");
+	let localStorageQueryResult; 
+	localStorageQueryResult = await chrome.storage.local.get("settings");
 	global.extensionSettings = localStorageQueryResult.settings;
-
+	localStorageQueryResult = await chrome.storage.local.get("uncheckedExams");
+	const uncheckedExams = localStorageQueryResult.uncheckedExams ? localStorageQueryResult.uncheckedExams : [];
+	
 	const spinnerSelector = "#floating > div.footable-loader";
 	await waitForElementToAppear(spinnerSelector);
 	await waitForElementToDisappear(spinnerSelector);
@@ -63,14 +65,14 @@ async function init() {
 	const tbody = table.querySelector("tbody");
 	const rows = tbody.querySelectorAll("tr");
 
-	insertCheckboxes(rows);
-	global.parsedExams = parseExams(rows);
+	insertCheckboxes(rows, uncheckedExams);
+	global.parsedExams = parseExams(rows, uncheckedExams);
 	
 	updateGUI();
 
 	// If the user changes any option in the extension's popup, update the GUI
 	chrome.storage.onChanged.addListener((changes, areaName) => {
-		if (areaName === "local") {
+		if (areaName === "local" && changes.settings) {
 			global.extensionSettings = changes.settings.newValue;
 			updateGUI();
 		}
@@ -103,7 +105,7 @@ function waitForElementToDisappear(selector) {
 	});
 }
 
-function insertCheckboxes(rows) {
+function insertCheckboxes(rows, uncheckedExams) {
 	rows.forEach(row => {
 		const checkbox = document.createElement("input");
 		checkbox.type = "checkbox";
@@ -114,15 +116,25 @@ function insertCheckboxes(rows) {
 		checkbox.style.height = "16px";
 		checkbox.style.cursor = "pointer";
 		checkbox.checked = false;
-
+		
 		// Insert the checkbox left to the exam name
 		row.firstElementChild.insertBefore(checkbox, row.firstElementChild.firstElementChild)
 
-		checkbox.addEventListener("change", updateGUI);
+		const examName = row.querySelector("td").textContent.slice(8).trim().replaceAll("\n", ""); 
+		checkbox.addEventListener("change", () => {
+			if (!checkbox.checked && !uncheckedExams.includes(examName)) {
+				uncheckedExams.push(examName);
+			}
+			else if (checkbox.checked && uncheckedExams.includes(examName)) {
+        		uncheckedExams.splice(uncheckedExams.indexOf(examName), 1);
+			}
+			chrome.storage.local.set({ "uncheckedExams": uncheckedExams });
+			updateGUI();
+		});
 	});
 }
 
-function parseExams(rows) {
+function parseExams(rows, uncheckedExams) {
 	let parsedExams = []
 	for (const row of rows) {
 		const cells = row.querySelectorAll("td");
@@ -168,7 +180,11 @@ function parseExams(rows) {
 		let gradeTmp = Math.round(Math.random() * 13 + 18)
 		if (isNaN(grade)) { gradeTmp = grade; }
 		
-		checkbox.checked = true;
+		if (uncheckedExams.includes(name)) {
+			checkbox.checked = false;
+		} else {
+			checkbox.checked = true;
+		}
 		parsedExams.push({name, credits, excludedCredits, grade : gradeTmp, date, checkbox});
 	}
 	return parsedExams;
