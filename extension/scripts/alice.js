@@ -1,7 +1,5 @@
 
 /**
- * fare i dati almalaurea in inglese?
- * layout responsive
  * schermata previsione
  * * */
 

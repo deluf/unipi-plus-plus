@@ -6,12 +6,13 @@
 }
 
 .upp-main-container {
+    min-width: calc(400px + 475px + 3em);
     padding: 1em;
 	gap: 1em;
 	background: #F6F6F6;
 	border: 1px solid #000000;
 	display: grid;
-	grid-template-columns: 2fr 3fr;
+	grid-template-columns: minmax(400px, 2.25fr) minmax(475px, 3fr);
 	grid-template-rows: auto auto;
 }
 
@@ -86,7 +87,6 @@
 
 .upp-grade-distribution-chart-container {
     min-height: 160px;
-	min-width: 400px;
 	width: 100%;
 }
 
