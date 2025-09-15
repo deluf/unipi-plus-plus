@@ -1,6 +1,25 @@
 
 /**
- * schermata previsione
+ * test dove uno non ha esami
+ * 
+ * Policy Requirement: Under the "User Data Privacy" section, you must "be transparent in how you handle user data." This includes having a comprehensive privacy policy.
+
+What to Do:
+
+Host a privacy policy on a publicly accessible URL (e.g., using GitHub Pages, a personal website, or a service like Termly).
+
+In your policy, clearly state:
+
+What data is accessed (exam names, grades, credits).
+
+That all data is processed locally on the user's computer and is never transmitted to or stored on any external server. This is your extension's best feature from a privacy standpoint, so highlight it.
+
+How chrome.storage.local is used to save user settings.
+
+Link to this privacy policy in the designated field of your Chrome Web Store developer dashboard when you upload the extension.
+ * 
+ * "UniPi++ is an unofficial, third-party extension and is not developed by or affiliated in any way with the University of Pisa."
+ * 
  * * */
 
 "use strict";
@@ -8,8 +27,19 @@
 // Global variables
 const global = {
 	selectedAlmalaureaStats: null,
+	lastCompleteUserStats: null,
 	extensionSettings: {},
-	parsedExams: []
+	parsedExams: [],
+	// Limits the dynamic range of each color map to preserve visibility on a gray background
+	colorMapLimits: {
+		interpolateMagma: { scale: 12/13, offset: 0 },
+		interpolateViridis: { scale: 12/13, offset: 0 },
+		interpolateCividis: { scale: 12/13, offset: 0 },
+		interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
+		interpolateRdPu: { scale: 9/13, offset: 4/13 },
+		interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
+		interpolateGreys: { scale: 9/13, offset: 4/13 },
+	}
 }
 
 // GUI elements
@@ -41,23 +71,34 @@ const GUI = {
     almalaureaVotoFinaleValue: null,
     almalaureaEtaAllaLaureaValue: null,
     almalaureaDurataStudiValue: null,
-    almalaureaStatsBottomText: null
+    almalaureaStatsBottomText: null,
+
+	// Forecast
+	forecastTable: null,
+	forecastCreditsSelect: null
 };
 
 init();
 async function init() {
+	let uncheckedExams;
+	try {
+		const settingslocalStorageQueryResult = await chrome.storage.local.get("settings");
+		global.extensionSettings = {
+			...DEFAULT_SETTINGS,
+			...settingslocalStorageQueryResult.settings
+		};
+
+		const uncheckedExamslocalStorageQueryResult = await chrome.storage.local.get("uncheckedExams");
+		uncheckedExams = uncheckedExamslocalStorageQueryResult.uncheckedExams ? 
+			uncheckedExamslocalStorageQueryResult.uncheckedExams : [];
+	}
+	catch {
+		global.extensionSettings = DEFAULT_SETTINGS;
+		uncheckedExams = []
+	}
+
 	drawLayout();
 
-	let localStorageQueryResult; 
-	localStorageQueryResult = await chrome.storage.local.get("settings");
-	global.extensionSettings = {
-		...DEFAULT_SETTINGS,
-		...localStorageQueryResult.settings
-	};
-
-	localStorageQueryResult = await chrome.storage.local.get("uncheckedExams");
-	const uncheckedExams = localStorageQueryResult.uncheckedExams ? localStorageQueryResult.uncheckedExams : [];
-	
 	const spinnerSelector = "#floating > div.footable-loader";
 	await waitForElementToAppear(spinnerSelector);
 	await waitForElementToDisappear(spinnerSelector);
@@ -81,11 +122,20 @@ async function init() {
 	});
 }
 
-function waitForElementToAppear(selector) {
-	return new Promise(resolve => {
-		if (document.querySelector(selector)) { return resolve(); }
+function waitForElementToAppear(selector, timeout = 2000) {
+	return new Promise((resolve, reject) => {
+		if (document.querySelector(selector)) { 
+			return resolve(); 
+		}
+		
+		const timeoutId = setTimeout(() => {
+			observer.disconnect();
+			reject(new Error(`Element "${selector}" did not appear within ${timeout}ms`));
+		}, timeout);
+		
 		const observer = new MutationObserver(() => {
 			if (document.querySelector(selector)) {
+				clearTimeout(timeoutId);
 				observer.disconnect();
 				resolve();
 			}
@@ -94,11 +144,20 @@ function waitForElementToAppear(selector) {
 	});
 }
 
-function waitForElementToDisappear(selector) {
-	return new Promise(resolve => {
-		if (!document.querySelector(selector)) { return resolve(); }
+function waitForElementToDisappear(selector, timeout = 1000) {
+	return new Promise((resolve, reject) => {
+		if (!document.querySelector(selector)) { 
+			return resolve(); 
+		}
+		
+		const timeoutId = setTimeout(() => {
+			observer.disconnect();
+			reject(new Error(`Element "${selector}" did not disappear within ${timeout}ms`));
+		}, timeout);
+		
 		const observer = new MutationObserver(() => {
 			if (!document.querySelector(selector)) {
+				clearTimeout(timeoutId);
 				observer.disconnect();
 				resolve();
 			}
@@ -208,6 +267,7 @@ function parseDateDDMMYY(date_string) {
 function drawLayout() {
 	// Draw the main display box below #libretto-inlineForms
 	const target = document.getElementById("libretto-inlineForms");
+	if (target == null) { return; } // Career selection screen
 	const mainDiv = document.createElement("div");
 	mainDiv.className = "upp-main-container";
 	target.insertAdjacentElement("afterend", mainDiv);
@@ -334,28 +394,49 @@ function drawLayout() {
 
 	GUI.gradeDistributionCanvas = document.createElement("canvas");
 	gradeDistributionDiv.appendChild(GUI.gradeDistributionCanvas);
-	
-		// AlmaLaurea stats
-	const almalaureaStatsDiv = document.createElement("div");
-	almalaureaStatsDiv.style.gridRow = "1";
-	almalaureaStatsDiv.style.gridColumn = "2";
-	mainDiv.appendChild(almalaureaStatsDiv);
 
-			// AlmaLaurea stats -> Title
+		// Secondary stats
+	const secondaryStatsDiv = document.createElement("div");
+	secondaryStatsDiv.style.gridRow = "1";
+	secondaryStatsDiv.style.gridColumn = "2";
+	mainDiv.appendChild(secondaryStatsDiv);
+
+			// Secondary stats -> Title
+	const secondaryStatsTitle = document.createElement("div");
+	secondaryStatsTitle.className = "upp-horizontal-flexbox-even"
+	secondaryStatsDiv.appendChild(secondaryStatsTitle);
+
+				// Secondary stats -> Title -> AlmaLaurea
 	const almalaureaTitle = document.createElement("h3");
 	almalaureaTitle.textContent = "Statistiche medie ateneo";
-	almalaureaTitle.className = "upp-almalaurea-title upp-horizontal-flexbox-center"
-	almalaureaStatsDiv.appendChild(almalaureaTitle);
+	almalaureaTitle.className = "upp-secondary-title selected"
+	secondaryStatsTitle.appendChild(almalaureaTitle);
 
-			// AlmaLaurea stats -> Filters
+				// Secondary stats -> Title -> Forecast
+	const forecastTitle = document.createElement("h3");
+	forecastTitle.textContent = "Previsioni";
+	forecastTitle.className = "upp-secondary-title"
+	secondaryStatsTitle.appendChild(forecastTitle);
+
+			// Secondary stats -> Body
+	const secondaryStatsBody = document.createElement("div");
+	secondaryStatsBody.className = "upp-horizontal-flexbox-even"
+	secondaryStatsDiv.appendChild(secondaryStatsBody);
+
+				// Secondary stats -> Body -> AlmaLaurea
+	const almalaureaStatsDiv = document.createElement("div");
+	almalaureaStatsDiv.style.display = "block";
+	secondaryStatsBody.appendChild(almalaureaStatsDiv);
+
+					// Secondary stats -> Body -> AlmaLaurea -> Filters
 	drawAlmalaureaFilters(almalaureaStatsDiv);
 
-			// Almalaurea stats -> Most important stats
+					// Secondary stats -> Body -> AlmaLaurea -> Most important stats
 	const bigAlmalaureaStatsDiv = document.createElement("div");
 	bigAlmalaureaStatsDiv.className = "upp-horizontal-flexbox-even";
 	almalaureaStatsDiv.appendChild(bigAlmalaureaStatsDiv);
 
-				// Almalaurea stats -> Most important stats -> Voto esami
+						// Secondary stats -> Body -> AlmaLaurea -> Most important stats -> Voto esami
 	const almalaureaVotoEsamiDiv = document.createElement("div");
 	almalaureaVotoEsamiDiv.className = "upp-vertical-flexbox-center";
 	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoEsamiDiv);
@@ -370,7 +451,7 @@ function drawLayout() {
 	GUI.almalaureaVotoEsamiValue.className = "upp-statistic-big";
 	almalaureaVotoEsamiDiv.appendChild(GUI.almalaureaVotoEsamiValue);
 
-				// Almalaurea stats -> Most important stats -> Voto finale
+						// Secondary stats -> Body -> AlmaLaurea -> Most important stats -> Voto finale
 	const almalaureaVotoFinaleDiv = document.createElement("div");
 	almalaureaVotoFinaleDiv.className = "upp-vertical-flexbox-center";
 	bigAlmalaureaStatsDiv.appendChild(almalaureaVotoFinaleDiv);
@@ -385,7 +466,7 @@ function drawLayout() {
 	GUI.almalaureaVotoFinaleValue.className = "upp-statistic-big";
 	almalaureaVotoFinaleDiv.appendChild(GUI.almalaureaVotoFinaleValue);
 
-				// Almalaurea stats -> Most important stats -> Età alla laurea
+						// Secondary stats -> Body -> AlmaLaurea -> Most important stats -> Età alla laurea
 	const almalaureaEtaAllaLaureaDiv = document.createElement("div");
 	almalaureaEtaAllaLaureaDiv.className = "upp-vertical-flexbox-center";
 	bigAlmalaureaStatsDiv.appendChild(almalaureaEtaAllaLaureaDiv);
@@ -399,7 +480,7 @@ function drawLayout() {
 	GUI.almalaureaEtaAllaLaureaValue.className = "upp-statistic-big";
 	almalaureaEtaAllaLaureaDiv.appendChild(GUI.almalaureaEtaAllaLaureaValue);
 
-				// Almalaurea stats -> Most important stats -> Durata studi
+						// Secondary stats -> Body -> AlmaLaurea -> Most important stats -> Durata studi
 	const almalaureaDurataStudiDiv = document.createElement("div");
 	almalaureaDurataStudiDiv.className = "upp-vertical-flexbox-center";
 	bigAlmalaureaStatsDiv.appendChild(almalaureaDurataStudiDiv);
@@ -413,11 +494,77 @@ function drawLayout() {
 	GUI.almalaureaDurataStudiValue.className = "upp-statistic-big";
 	almalaureaDurataStudiDiv.appendChild(GUI.almalaureaDurataStudiValue);
 
-					// Almalaurea stats -> Bottom text
+					// Secondary stats -> Body -> AlmaLaurea -> Bottom text
 	GUI.almalaureaStatsBottomText = document.createElement("div");
 	GUI.almalaureaStatsBottomText.className = "upp-horizontal-flexbox-center upp-info-text";
 	GUI.almalaureaStatsBottomText.textContent = "Seleziona un corso di laurea per visualizzane le statistiche";
 	almalaureaStatsDiv.appendChild(GUI.almalaureaStatsBottomText);
+
+				// Secondary stats -> Body -> Forecast
+	const forecastDiv = document.createElement("div");
+	forecastDiv.style.display = "none";
+	secondaryStatsBody.appendChild(forecastDiv);
+
+					// Secondary stats -> Body -> Forecast -> Credits
+	const forecastCreditsDiv = document.createElement("div");
+	forecastCreditsDiv.className = "upp-horizontal-flexbox-center";
+	forecastCreditsDiv.style.marginBottom = ".75em";
+	forecastDiv.appendChild(forecastCreditsDiv);
+
+	const forecastCreditsText = document.createElement("span");
+	forecastCreditsText.textContent = "Crediti del prossimo esame: ";
+	forecastCreditsText.style.marginRight = ".5em";
+	forecastCreditsDiv.appendChild(forecastCreditsText);
+	
+	GUI.forecastCreditsSelect = document.createElement("select");
+	GUI.forecastCreditsSelect.style.textAlign = "center";
+	GUI.forecastCreditsSelect.style.padding = "5px";
+	forecastCreditsDiv.appendChild(GUI.forecastCreditsSelect);
+
+	const preferredCredits = [3, 6, 9, 12, 15];
+	preferredCredits.forEach(val => {
+		const option = document.createElement("option");
+		option.value = val;
+		option.textContent = val;
+		GUI.forecastCreditsSelect.appendChild(option);
+	});
+
+	const separator = document.createElement("option");
+	separator.disabled = true;
+	separator.textContent = "─";
+	GUI.forecastCreditsSelect.appendChild(separator);
+
+	for (let i = 1; i <= 30; i++) {
+		if (!preferredCredits.includes(i)) {
+			const option = document.createElement("option");
+			option.value = i;
+			option.textContent = i;
+			GUI.forecastCreditsSelect.appendChild(option);
+		}
+	}
+
+					// Secondary stats -> Body -> Forecast -> Table
+	GUI.forecastTable = createEmptyForecastTable();
+	forecastDiv.appendChild(GUI.forecastTable);
+
+				// Secondary stats -> Forecast -> Event listeners
+	almalaureaTitle.addEventListener("click", () => {
+		if (almalaureaStatsDiv.style.display != "none") { return; }
+		almalaureaStatsDiv.style.display = "block";
+		forecastDiv.style.display = "none";
+		forecastTitle.classList.toggle("selected");
+		almalaureaTitle.classList.toggle("selected");
+	});
+
+	forecastTitle.addEventListener("click", () => {
+		if (forecastDiv.style.display != "none") { return; }
+		almalaureaStatsDiv.style.display = "none";
+		forecastDiv.style.display = "block";
+		forecastTitle.classList.toggle("selected");
+		almalaureaTitle.classList.toggle("selected");
+	});
+
+	GUI.forecastCreditsSelect.addEventListener("change", updateForecastTable);
 
 		// Time series chart
 	const timeSeriesDiv = document.createElement("div");
@@ -563,6 +710,78 @@ function updateAlmalaureaStats() {
 	}
 }
 
+function createEmptyForecastTable() {
+	const table = document.createElement("table");
+	table.className = "upp-forecast-table";
+
+	function createRow(values) {
+		const tr = document.createElement("tr");
+		if (values.length === 1) {
+			const td = document.createElement("td");
+			td.textContent = values[0];
+			td.colSpan = 14;
+			td.style.textAlign = "left";
+			td.style.paddingTop = ".75em";
+			td.style.paddingLeft = ".75em";
+			tr.appendChild(td);
+		}
+		else {
+			values.forEach(val => {
+				const td = document.createElement("td");
+				td.textContent = val;
+				td.style.border = "1px solid #969696";
+				tr.appendChild(td);
+			});
+		}
+		return tr;
+	}
+
+	const grades = Array.from({ length: 13 }, (_, i) => 18 + i).map(String);
+	grades.push("30L");
+
+	table.appendChild(createRow(grades));
+	table.appendChild(createRow(["Media ponderata"]));
+	table.appendChild(createRow(grades.map(() => "-")));
+	table.appendChild(createRow(grades.map(() => "-")));
+	table.appendChild(createRow(["Media aritmetica"]));
+	table.appendChild(createRow(grades.map(() => "-")));
+	table.appendChild(createRow(grades.map(() => "-")));
+
+	return table;
+}
+
+function updateForecastTable() {
+	const table = GUI.forecastTable;
+	const examCredits = parseInt(GUI.forecastCreditsSelect.value);
+	const stats = global.lastCompleteUserStats;
+	const honorsValue = global.extensionSettings.honorsValue;
+
+	const grades = Array.from({ length: 14 }, (_, i) => 18 + i);
+	grades.forEach(index => {
+		const grade = index <= 30 ? index : honorsValue;
+		
+		const newWeightedAverage = 
+			(stats.weightedAverage * (stats.validCredits + stats.excludedCredits) + grade * examCredits) /
+			(examCredits + stats.validCredits + stats.excludedCredits);
+		const weightedAverageOffset = newWeightedAverage - stats.weightedAverage;
+
+		const newArithmeticAverage = 
+			(stats.arithmeticAverage * stats.validExamsCount + grade) / 
+			(stats.validExamsCount + 1);
+		const arithmeticAverageOffset = newArithmeticAverage - stats.arithmeticAverage;
+		
+		table.rows[0].cells[index - 18].style.backgroundColor = computeExamColor(index, 48);
+		
+		table.rows[2].cells[index - 18].textContent = newWeightedAverage.toFixed(2);
+		table.rows[3].cells[index - 18].textContent = weightedAverageOffset.toFixed(2);
+		table.rows[5].cells[index - 18].textContent = newArithmeticAverage.toFixed(2);
+		table.rows[6].cells[index - 18].textContent = arithmeticAverageOffset.toFixed(2);
+
+		table.rows[3].cells[index - 18].style.color = weightedAverageOffset < 0 ? "red" : "green";
+		table.rows[6].cells[index - 18].style.color = weightedAverageOffset < 0 ? "red" : "green";
+	})
+}
+
 function updateGUI() {
 	const exams = computeExcludedCredits(
 		global.parsedExams,
@@ -576,12 +795,18 @@ function updateGUI() {
 		global.extensionSettings.honorsValue,
 		global.extensionSettings.exclusionPolicy,
 		global.extensionSettings.exclusionValue
-	);
+	); 
+	const completeUserStats = computeUserStats(
+		exams,
+		global.extensionSettings.honorsValue,
+		global.extensionSettings.exclusionPolicy,
+		global.extensionSettings.exclusionValue
+	); global.lastCompleteUserStats = completeUserStats;
 	const finalGradePrediction = predictFinalGradeWith95PI(userStats.almaLaureaAverage);
 	const scatterData = computeScatterData(filteredExams, global.extensionSettings.honorsValue);
 
-	GUI.arithmeticAverageValue.textContent = userStats.arithmeticAverage;
-	GUI.weightedAverageValue.textContent = userStats.weightedAverage;
+	GUI.arithmeticAverageValue.textContent = userStats.arithmeticAverage.toFixed(2);
+	GUI.weightedAverageValue.textContent = userStats.weightedAverage.toFixed(2);
 	GUI.finalGradePredictionValue.textContent = finalGradePrediction.value >= 110.5 ? "110L" : Math.round(finalGradePrediction.value);
 	GUI.finalGradePredictionValuePI.textContent = "±" + Math.round(finalGradePrediction.predictionInterval);
 	
@@ -591,6 +816,7 @@ function updateGUI() {
 	);
 	updateGradeDistributionChart(userStats.gradeDistribution, global.extensionSettings.honorsValue);
 	updateExamsChart(scatterData, global.selectedAlmalaureaStats);
+	updateForecastTable();
 }
 
 function updateAcademicYearFilter(exams) {
@@ -701,14 +927,10 @@ function computeUserStats(exams, honorsValue) {
 		gradeDistribution[exam.grade]++;
 	});
 
-	const weightedAverageRaw = validCredits > 0 ? (totalWeighted / validCredits) : 0;
-	const arithmeticAverageRaw = validExamsCount > 0 ? (totalArithmetic / validExamsCount) : 0;
-	const almaLaureaAverageRaw = validExamsCount > 0 ? (totalAlmaLaurea / validExamsCount) : 0;
-
 	return {
-		arithmeticAverage: arithmeticAverageRaw.toFixed(2),
-		weightedAverage: weightedAverageRaw.toFixed(2),
-		almaLaureaAverage: almaLaureaAverageRaw.toFixed(2),
+		arithmeticAverage: totalArithmetic / validExamsCount,
+		weightedAverage: totalWeighted / validCredits,
+		almaLaureaAverage: totalAlmaLaurea / validExamsCount,
 		validCredits,
 		excludedCredits,
 		validExamsCount,
@@ -883,16 +1105,6 @@ function computeExamBorderColor(grade) {
 	return computeExamColor(grade, 255);
 }
 
-const colorMapLimits = {
-	interpolateMagma: { scale: 12/13, offset: 0 },
-	interpolateViridis: { scale: 12/13, offset: 0 },
-	interpolateCividis: { scale: 12/13, offset: 0 },
-	interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
-	interpolateRdPu: { scale: 9/13, offset: 4/13 },
-	interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
-	interpolateGreys: { scale: 9/13, offset: 4/13 },
-};
-
 /**
  * Computes the hex value of the color associated with the specified grade and alpha
  * - The grade must be in the range [18, 31]
@@ -900,7 +1112,7 @@ const colorMapLimits = {
  */
 function computeExamColor(grade, alpha) {
 	const gradeNormalized = (grade - 18) / 13;
-	const limits = colorMapLimits[global.extensionSettings.colorMap];
+	const limits = global.colorMapLimits[global.extensionSettings.colorMap];
 	const tone = gradeNormalized * limits.scale + limits.offset;
 	const color = d3[global.extensionSettings.colorMap](tone);
 	if (color.length === 7) {
