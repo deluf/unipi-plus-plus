@@ -173,5 +173,15 @@
 .upp-forecast-table td {
     text-align: center;
     font-size: 1.05em;
-    padding: 4px;
+    padding-left: max(1%, 4px);
+    padding-right: max(1%, 4px);
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+.upp-checkbox {
+    margin-right: 5px !important; /* Otherwise overridden by already existing css */
+	width: 16px;
+	height: 16px;
+    cursor: pointer;
 }

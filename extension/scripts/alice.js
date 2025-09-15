@@ -1,7 +1,5 @@
 
 /**
- * test dove uno non ha esami
- * 
  * Policy Requirement: Under the "User Data Privacy" section, you must "be transparent in how you handle user data." This includes having a comprehensive privacy policy.
 
 What to Do:
@@ -24,22 +22,35 @@ Link to this privacy policy in the designated field of your Chrome Web Store dev
 
 "use strict";
 
+// Constants
+	// How the university identifies an honors grade (30 cum laude).
+	// Must be "30L", this is a mandatory constraint
+const HONORS_TEXT = "30L";
+	// To operate with numerical grades only, HONORS_TEXT is represented as 31.
+	// The actual value assigned to 30L might be different than that 
+	//  (the user can set it in extensionSettings.honorsValue).
+	// Must be 31 to ensure continuity with the other grades, otherwise things break.
+	//  (For example, there are usually loops from 18 to 31 to include all grades)
+const HONORS_GRADE = 31;
+	// Must be 18 to ensure continuity with the other grades, otherwise things break
+const MIN_GRADE = 18;
+	// Limits the dynamic range of each color map to preserve visibility on a gray background
+const COLOR_MAP_LIMITS = {
+	interpolateMagma: { scale: 12/13, offset: 0 },
+	interpolateViridis: { scale: 12/13, offset: 0 },
+	interpolateCividis: { scale: 12/13, offset: 0 },
+	interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
+	interpolateRdPu: { scale: 9/13, offset: 4/13 },
+	interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
+	interpolateGreys: { scale: 9/13, offset: 4/13 },
+};
+
 // Global variables
 const global = {
 	selectedAlmalaureaStats: null,
 	lastCompleteUserStats: null,
 	extensionSettings: {},
 	parsedExams: [],
-	// Limits the dynamic range of each color map to preserve visibility on a gray background
-	colorMapLimits: {
-		interpolateMagma: { scale: 12/13, offset: 0 },
-		interpolateViridis: { scale: 12/13, offset: 0 },
-		interpolateCividis: { scale: 12/13, offset: 0 },
-		interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
-		interpolateRdPu: { scale: 9/13, offset: 4/13 },
-		interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
-		interpolateGreys: { scale: 9/13, offset: 4/13 },
-	}
 }
 
 // GUI elements
@@ -97,17 +108,20 @@ async function init() {
 		uncheckedExams = []
 	}
 
-	drawLayout();
+	try {
+		drawLayout();
+	} catch (err) {
+		console.log(err.message);
+		return; // Stop the execution
+	}
 
 	const spinnerSelector = "#floating > div.footable-loader";
-	await waitForElementToAppear(spinnerSelector);
-	await waitForElementToDisappear(spinnerSelector);
-	await new Promise(r => setTimeout(r, 100)); // Just to be sure...
+	const rowsSelector = "#tableLibretto tbody tr";
+	await waitForElementToAppear(spinnerSelector, 2000);
+	await waitForElementToDisappear(spinnerSelector, 1000);
+	await waitForElementToAppear(rowsSelector, 500);
 
-	const table = document.querySelector("#tableLibretto");
-	const tbody = table.querySelector("tbody");
-	const rows = tbody.querySelectorAll("tr");
-
+	const rows = document.querySelectorAll("#tableLibretto tbody tr");
 	insertCheckboxes(rows, uncheckedExams);
 	global.parsedExams = parseExams(rows, uncheckedExams);
 	
@@ -122,7 +136,7 @@ async function init() {
 	});
 }
 
-function waitForElementToAppear(selector, timeout = 2000) {
+function waitForElementToAppear(selector, timeout = 1000) {
 	return new Promise((resolve, reject) => {
 		if (document.querySelector(selector)) { 
 			return resolve(); 
@@ -172,17 +186,20 @@ function insertCheckboxes(rows, uncheckedExams) {
 		checkbox.type = "checkbox";
 		checkbox.name = "includeInAverage";
 		checkbox.className = "upp-checkbox";
-		checkbox.style.marginRight = "5px";
-		checkbox.style.width = "16px";
-		checkbox.style.height = "16px";
-		checkbox.style.cursor = "pointer";
 		checkbox.checked = false;
 		
 		// Insert the checkbox left to the exam name
 		row.firstElementChild.insertBefore(checkbox, row.firstElementChild.firstElementChild)
 
-		const examName = row.querySelector("td").textContent.slice(8).trim().replaceAll("\n", ""); 
+		const examName = extractExamName(row);
 		checkbox.addEventListener("change", () => {
+			if (!global.parsedExams.some(exam => 
+				(exam.checkbox.checked === true) && !isNaN(exam.grade)
+			)) { 
+				alert("Devi selezionare almeno un esame");
+				checkbox.checked = true;
+				return;
+			}
 			if (!checkbox.checked && !uncheckedExams.includes(examName)) {
 				uncheckedExams.push(examName);
 			}
@@ -197,10 +214,28 @@ function insertCheckboxes(rows, uncheckedExams) {
 
 function parseExams(rows, uncheckedExams) {
 	let parsedExams = [];
-	let debug = 18;
+	let debug = 18; //FIXME:
 	for (const row of rows) {
 		const cells = row.querySelectorAll("td");
-		const checkbox = cells[0].querySelector("input[type=checkbox].upp-checkbox");
+		const checkbox = row.querySelector("input[type=checkbox].upp-checkbox");
+
+		/** Example of a row element
+<tr>
+  <td>
+    <a ... >591AA - ANALISI I</a>		(name)
+    <div>
+      <a id="ad_piano" ...>​</a>		 (here there might be sovran or debito icons, in this case it's ad_piano)
+    </div>
+  </td>
+  <td>...</td>						
+  <td>12</td>					   		(credits)
+  <td>...</td>		
+  <td>...</td>
+  <td>28&nbsp;-&nbsp;21/09/2022</td>	(grade and date - might be empty)
+</tr>
+		 */
+		const creditsCellIndex = 2;
+		const gradeAndDateCellIndex = 5;
 
 		// Do not count the exam if it contains either:
 		// - #sovran (attività sovrannumeraria) -> Extra activities
@@ -211,18 +246,16 @@ function parseExams(rows, uncheckedExams) {
 		}
 
 		// A mandatory exam has not been completed yet by the student
-		if (!cells[5].textContent.includes("-")) {
+		if (!cells[gradeAndDateCellIndex].textContent.includes("-")) {
 			checkbox.disabled = true;
 			continue;
 		}
 
-		// Removes the 5-letter exam code and " - " 
-		//  (e.g, "075II - COMUNICAZIONI NUMERICHE" -> "COMUNICAZIONI NUMERICHE")
-		const name = cells[0].textContent.slice(8).trim().replaceAll("\n", ""); 
-		const credits = parseInt(cells[2].textContent, 10);
+		const name = extractExamName(row);
+		const credits = parseInt(cells[creditsCellIndex].textContent, 10);
 
 		// (e.g. "28 - 21/09/2022" -> 28, "21/09/2022")
-		const grade_and_date = cells[5].textContent.split("-").map(s => s.trim());
+		const grade_and_date = cells[gradeAndDateCellIndex].textContent.split("-").map(s => s.trim());
 		const date = parseDateDDMMYY(grade_and_date[1])
 
 		let grade = grade_and_date[0];
@@ -232,14 +265,14 @@ function parseExams(rows, uncheckedExams) {
 			grade = NaN;
 			checkbox.disabled = true;
 			excludedCredits = credits; 
-		} else if (grade === "30L") { 
-			grade = 31; // Later it will be converted to the actual honors value
+		} else if (grade === HONORS_TEXT) { 
+			grade = HONORS_GRADE; // Later it will be converted to the actual honors value
 		} else { 
 			grade = parseInt(grade, 10); 
 		}
 		
 		// FIXME: Debug - use random grades
-		let gradeTmp = debug <= 31 ? debug : Math.round(Math.random() * 13 + 18);
+		let gradeTmp = debug <= HONORS_GRADE ? debug : Math.round(Math.random() * 13 + 18);
 		debug++;
 		if (isNaN(grade)) { gradeTmp = grade; }
 		
@@ -251,6 +284,15 @@ function parseExams(rows, uncheckedExams) {
 		parsedExams.push({name, credits, excludedCredits, grade : gradeTmp, date, checkbox});
 	}
 	return parsedExams;
+}
+
+/**
+ * Removes the 5-letter exam code and " - "
+ * (e.g, "075II - COMUNICAZIONI NUMERICHE" -> "COMUNICAZIONI NUMERICHE")
+ */
+function extractExamName(row) {
+	const charactersToSkip = 8;
+	return row.querySelector("td").textContent.slice(charactersToSkip).trim().replaceAll("\n", ""); 
 }
 
 /**
@@ -267,7 +309,7 @@ function parseDateDDMMYY(date_string) {
 function drawLayout() {
 	// Draw the main display box below #libretto-inlineForms
 	const target = document.getElementById("libretto-inlineForms");
-	if (target == null) { return; } // Career selection screen
+	if (target == null) { throw new Error("[drawLayout] Career selection screen detected"); }
 	const mainDiv = document.createElement("div");
 	mainDiv.className = "upp-main-container";
 	target.insertAdjacentElement("afterend", mainDiv);
@@ -426,6 +468,7 @@ function drawLayout() {
 				// Secondary stats -> Body -> AlmaLaurea
 	const almalaureaStatsDiv = document.createElement("div");
 	almalaureaStatsDiv.style.display = "block";
+	almalaureaStatsDiv.style.width = "100%";
 	secondaryStatsBody.appendChild(almalaureaStatsDiv);
 
 					// Secondary stats -> Body -> AlmaLaurea -> Filters
@@ -502,6 +545,7 @@ function drawLayout() {
 
 				// Secondary stats -> Body -> Forecast
 	const forecastDiv = document.createElement("div");
+	forecastDiv.style.width = "100%";
 	forecastDiv.style.display = "none";
 	secondaryStatsBody.appendChild(forecastDiv);
 
@@ -526,6 +570,7 @@ function drawLayout() {
 		const option = document.createElement("option");
 		option.value = val;
 		option.textContent = val;
+		if (val === 9) { option.selected = true; }
 		GUI.forecastCreditsSelect.appendChild(option);
 	});
 
@@ -534,7 +579,8 @@ function drawLayout() {
 	separator.textContent = "─";
 	GUI.forecastCreditsSelect.appendChild(separator);
 
-	for (let i = 1; i <= 30; i++) {
+	const maxCreditsAllowedInForecast = 30; // Purely stylistical choice
+	for (let i = 1; i <= maxCreditsAllowedInForecast; i++) {
 		if (!preferredCredits.includes(i)) {
 			const option = document.createElement("option");
 			option.value = i;
@@ -736,8 +782,10 @@ function createEmptyForecastTable() {
 		return tr;
 	}
 
-	const grades = Array.from({ length: 13 }, (_, i) => 18 + i).map(String);
-	grades.push("30L");
+	const grades = [
+		...Array.from({ length: HONORS_GRADE - MIN_GRADE }, (_, i) => String(MIN_GRADE + i)), // [18, 30]
+		HONORS_TEXT	// Add 30L
+	];
 
 	table.appendChild(createRow(grades));
 	table.appendChild(createRow(["Media ponderata"]));
@@ -756,9 +804,23 @@ function updateForecastTable() {
 	const stats = global.lastCompleteUserStats;
 	const honorsValue = global.extensionSettings.honorsValue;
 
-	const grades = Array.from({ length: 14 }, (_, i) => 18 + i);
-	grades.forEach(index => {
-		const grade = index <= 30 ? index : honorsValue;
+	if (stats == null) { 
+		console.log("[updateForecastTable] No available user stats");
+		return;
+	}
+
+	const gradeRowIndex = 0;
+	const weightedAverageRowIndex = 2;
+	const weightedAverageOffsetRowIndex = 3;
+	const arithmeticdAverageRowIndex = 5;
+	const arithmeticdAverageOffsetRowIndex = 6;
+
+	const gradeRowColormapAlpha = 48; // [0, 255], 48 is light so black text stays visible
+	const decimalPrecision = 2;
+
+	for (let i = MIN_GRADE; i <= HONORS_GRADE; i++) {
+		const grade = i < HONORS_GRADE ? i : honorsValue;
+		const cellIndex = i - MIN_GRADE; 
 		
 		const newWeightedAverage = 
 			(stats.weightedAverage * (stats.validCredits + stats.excludedCredits) + grade * examCredits) /
@@ -770,44 +832,70 @@ function updateForecastTable() {
 			(stats.validExamsCount + 1);
 		const arithmeticAverageOffset = newArithmeticAverage - stats.arithmeticAverage;
 		
-		table.rows[0].cells[index - 18].style.backgroundColor = computeExamColor(index, 48);
+		table.rows[gradeRowIndex].cells[cellIndex].style.backgroundColor = computeExamColor(i, gradeRowColormapAlpha);
 		
-		table.rows[2].cells[index - 18].textContent = newWeightedAverage.toFixed(2);
-		table.rows[3].cells[index - 18].textContent = weightedAverageOffset.toFixed(2);
-		table.rows[5].cells[index - 18].textContent = newArithmeticAverage.toFixed(2);
-		table.rows[6].cells[index - 18].textContent = arithmeticAverageOffset.toFixed(2);
+		table.rows[weightedAverageRowIndex].cells[cellIndex].textContent = newWeightedAverage.toFixed(decimalPrecision);
+		table.rows[weightedAverageOffsetRowIndex].cells[cellIndex].textContent = weightedAverageOffset.toFixed(decimalPrecision);
+		table.rows[weightedAverageOffsetRowIndex].cells[cellIndex].style.color = weightedAverageOffset < 0 ? "red" : "green";
 
-		table.rows[3].cells[index - 18].style.color = weightedAverageOffset < 0 ? "red" : "green";
-		table.rows[6].cells[index - 18].style.color = weightedAverageOffset < 0 ? "red" : "green";
-	})
+		table.rows[arithmeticdAverageRowIndex].cells[cellIndex].textContent = newArithmeticAverage.toFixed(decimalPrecision);
+		table.rows[arithmeticdAverageOffsetRowIndex].cells[cellIndex].textContent = arithmeticAverageOffset.toFixed(decimalPrecision);
+		table.rows[arithmeticdAverageOffsetRowIndex].cells[cellIndex].style.color = arithmeticAverageOffset < 0 ? "red" : "green";
+	}
 }
 
 function updateGUI() {
-	const exams = computeExcludedCredits(
-		global.parsedExams,
+	const selectedExams = global.parsedExams.filter(exam => exam.checkbox.checked === true);
+	const gradedSelectedExams = selectedExams.filter(exam => !isNaN(exam.grade));
+	const selectedAcademicYear = updateAcademicYearFilter(gradedSelectedExams);
+	
+	const selectedExamsWithAdjustedCredits = computeExcludedCredits(
+		selectedExams,
 		global.extensionSettings.exclusionPolicy,
 		global.extensionSettings.exclusionValue
 	)
-	const selectedAcademicYear = updateAcademicYearFilter(global.parsedExams);
-	const filteredExams = filterExamsByAcademicYear(exams, selectedAcademicYear);
-	const userStats = computeUserStats(
-		filteredExams,
+	if (!selectedExamsWithAdjustedCredits.some(
+		exam => !isNaN(exam.grade) && (exam.credits - exam.excludedCredits > 0)
+	)) { 
+		alert("Non è presente alcun esame valido. Rivedi i criteri di esclusione nelle imposazioni dell'estensione")
+		resetGUI();
+		return; 
+	}
+
+	let exams = selectedExamsWithAdjustedCredits;
+	let userStats = computeUserStats(	
+		selectedExamsWithAdjustedCredits,
 		global.extensionSettings.honorsValue,
 		global.extensionSettings.exclusionPolicy,
 		global.extensionSettings.exclusionValue
 	); 
-	const completeUserStats = computeUserStats(
-		exams,
-		global.extensionSettings.honorsValue,
-		global.extensionSettings.exclusionPolicy,
-		global.extensionSettings.exclusionValue
-	); global.lastCompleteUserStats = completeUserStats;
-	const finalGradePrediction = predictFinalGradeWith95PI(userStats.almaLaureaAverage);
-	const scatterData = computeScatterData(filteredExams, global.extensionSettings.honorsValue);
+	global.lastCompleteUserStats = userStats;
 
-	GUI.arithmeticAverageValue.textContent = userStats.arithmeticAverage.toFixed(2);
-	GUI.weightedAverageValue.textContent = userStats.weightedAverage.toFixed(2);
-	GUI.finalGradePredictionValue.textContent = finalGradePrediction.value >= 110.5 ? "110L" : Math.round(finalGradePrediction.value);
+	if (selectedAcademicYear !== "all") {
+		exams = filterExamsByAcademicYear(exams, selectedAcademicYear);
+		// There are no valid exams in the selected academic year, only update the scatter chart (with empty dots)
+		if (!exams.some(exam => !isNaN(exam.grade) && (exam.credits - exam.excludedCredits > 0))) { 
+			resetGUI();
+			const scatterData = computeScatterData(exams, global.extensionSettings.honorsValue);
+			updateExamsChart(scatterData, global.selectedAlmalaureaStats);
+			return; 
+		}
+		userStats = computeUserStats(
+			exams,
+			global.extensionSettings.honorsValue,
+			global.extensionSettings.exclusionPolicy,
+			global.extensionSettings.exclusionValue
+		);
+	}
+
+	const finalGradePrediction = predictFinalGradeWith95PI(userStats.almaLaureaAverage);
+	const scatterData = computeScatterData(exams, global.extensionSettings.honorsValue);
+
+	const decimalPrecision = 2;
+	GUI.arithmeticAverageValue.textContent = userStats.arithmeticAverage.toFixed(decimalPrecision);
+	GUI.weightedAverageValue.textContent = userStats.weightedAverage.toFixed(decimalPrecision);
+	GUI.finalGradePredictionValue.textContent = finalGradePrediction.value >= 110.5 ?
+		"110L" : Math.round(finalGradePrediction.value); // 110.5 is a purely stylistical threshold
 	GUI.finalGradePredictionValuePI.textContent = "±" + Math.round(finalGradePrediction.predictionInterval);
 	
 	updateCreditsProgressBar(
@@ -819,10 +907,27 @@ function updateGUI() {
 	updateForecastTable();
 }
 
-function updateAcademicYearFilter(exams) {
-	const selectedExams = exams.filter(exam => exam.checkbox.checked === true);
+function resetGUI() {
+	// User stats
+	GUI.weightedAverageValue.textContent = "-";
+	GUI.arithmeticAverageValue.textContent = "-";
+	GUI.finalGradePredictionValue.textContent = "-";
+	GUI.finalGradePredictionValuePI.textContent = "-";
+	// Progress bar
+	GUI.creditsProgressTextLeft.textContent = "";
+	GUI.creditsProgressTextRight.textContent = "";
+	GUI.creditsProgressTextLeftmost.textContent = "";
+	GUI.creditsProgressTextRightmost.textContent = "";
+	GUI.creditsProgressTextRight.style.position = "absolute";
+	GUI.creditsProgress.style.width = "0%";
+	// Charts
+	if (GUI.gradeDistributionChart) { GUI.gradeDistributionChart.destroy(); }
+    if (GUI.examsChart) { GUI.examsChart.destroy(); }
+}
+
+function updateAcademicYearFilter(gradedSelectedExams) {
 	const academicYears = [...new Set(
-		selectedExams.map(exam => dateToAcademicYear(exam.date))
+		gradedSelectedExams.map(exam => dateToAcademicYear(exam.date))
 	)].sort();
 
     const previousValue = GUI.academicYearFilter.value;
@@ -859,9 +964,10 @@ function updateAcademicYearFilter(exams) {
  * An academic year runs from October 1st to September 31st
  */
 function dateToAcademicYear(date) {
+	const october = 9; // Months are 0-indexed in JS
     const year = date.getFullYear();
-    const month = date.getMonth(); // 0-indexed (October is 9)
-    const startYear = month >= 9 ? year : year - 1;
+    const month = date.getMonth(); 
+    const startYear = month >= october ? year : year - 1;
     return `${startYear}/${startYear + 1}`;
 }
 
@@ -907,7 +1013,7 @@ function computeUserStats(exams, honorsValue) {
 	let totalAlmaLaurea = 0;
 
 	let gradeDistribution = {};
-	for (let i = 18; i <= 31; i++) { gradeDistribution[i] = 0; }
+	for (let i = MIN_GRADE; i <= HONORS_GRADE; i++) { gradeDistribution[i] = 0; }
 
 	exams.forEach(exam => {
 		excludedCredits += exam.excludedCredits;
@@ -919,10 +1025,11 @@ function computeUserStats(exams, honorsValue) {
 		validExamsCount++;
 		validCredits += examValidCredits;
 
-		let examGrade = exam.grade === 31 ? honorsValue : exam.grade;
+		let examGrade = exam.grade === HONORS_GRADE ? honorsValue : exam.grade;
 		totalArithmetic += examGrade;
 		totalWeighted += examGrade * examValidCredits;
-		totalAlmaLaurea += examGrade > 30 ? 30 : examGrade;
+		// AlmaLaurea caps the grade at 30
+		totalAlmaLaurea += exam.grade === HONORS_GRADE ? 30 : exam.grade;
 		
 		gradeDistribution[exam.grade]++;
 	});
@@ -941,7 +1048,6 @@ function computeUserStats(exams, honorsValue) {
 
 function filterExamsByAcademicYear(exams, academicYear) {
     const filteredExams = exams.filter(exam => {
-        if (!exam.checkbox.checked) { return false; }
         if (academicYear === "all") { return true; }
         return dateToAcademicYear(exam.date) === academicYear;
     });
@@ -953,7 +1059,7 @@ function predictFinalGradeWith95PI(almaLaureaAverage) {
 	const a = -0.27050574;
     const b = 17.42744807;
     const c = -166.18817266;
-	let x = almaLaureaAverage;
+	let x = almaLaureaAverage; // 18 to 30, by design
     let y = x*x * a + x * b + c;
 
 	// [ prediction interval = z-quantile * standard error of the prediction ]
@@ -962,7 +1068,7 @@ function predictFinalGradeWith95PI(almaLaureaAverage) {
 	const standardErrors = [4.028666215623055, 3.3386414826098014, 2.77486491572064, 2.344159539859904, 2.047313529760881, 1.8716019067649696, 1.7881642893469032, 1.7601429216805495, 1.7554935896873967, 1.7550205493971243, 1.7547579109517102, 1.766210287167336, 1.8154961601834838];
 	// z-quantile for the 95% prediction interval (residuals are assumed to be normally distributed)
 	const zQuantile = 1.9657953681092568;
-    let predictionInterval = zQuantile * standardErrors[Math.round(x) - 18];
+    let predictionInterval = zQuantile * standardErrors[Math.round(x) - MIN_GRADE];
 
 	// The model is trained on data aggregated by degree programs (the only available data i found), it would have
 	//  been better if it was trained directly on (arithmetic average of a single graduate -> final grade) pairs
@@ -979,14 +1085,14 @@ function computeScatterData(exams, honorsValue) {
 		scatterPoints.push({
 			// Coordinates
 			x: exam.date,
-			y: exam.grade === 31 ? honorsValue : exam.grade,
+			y: exam.grade === HONORS_GRADE ? honorsValue : exam.grade,
 			// Running average and color computations
 			originalGrade: exam.grade,
 			validCredits: exam.credits - exam.excludedCredits,
 			excludedCredits: exam.excludedCredits,
 			// Tooltip display values
 			name: exam.name,
-			gradeText: exam.grade === 31 ? "30L" : exam.grade,
+			gradeText: exam.grade === HONORS_GRADE ? HONORS_TEXT : exam.grade,
 			creditsText: exam.excludedCredits === 0 ? exam.credits : exam.credits + " (" + exam.excludedCredits + " non conteggiati)"
 		});
 	});
@@ -997,16 +1103,19 @@ function computeScatterData(exams, honorsValue) {
 	let runningCredits = 0;
 	let runningWeighted = 0;
 	let runningTotal = 0;
+	let runningExams = 0;
 
-	scatterPoints.forEach((point, index) => {
+	scatterPoints.forEach((point) => {
+		if (point.validCredits === 0) { return; }
 		runningCredits += point.validCredits;
 		runningWeighted += point.y * point.validCredits;
 		runningTotal += point.y;
+		runningExams++;
 		
 		averageLines.push({
 			x: point.x,
 			weightedAverage: runningWeighted / runningCredits,
-			arithmeticAverage: runningTotal / (index + 1)
+			arithmeticAverage: runningTotal / runningExams
 		});
 	});
 
@@ -1027,16 +1136,16 @@ function updateCreditsProgressBar(achievedCredits, totalCredits) {
 	GUI.creditsProgressTextRight.style.position = "absolute";
 	GUI.creditsProgress.style.width = precentage + "%";
 
-	if (precentage < 15) {
+	if (precentage < 15) { // Progress bar too little to contain text
 		GUI.creditsProgressTextRight.textContent = precentage + " %";
 		GUI.creditsProgressTextRight.style.position = "relative";
 		GUI.creditsProgressTextRightmost.textContent = creditsText;
 	}
-	else if (precentage < 50) {
+	else if (precentage < 50) { // Progress bar big enough to contain the percentage text
 		GUI.creditsProgressTextLeft.textContent = precentage + " %";
 		GUI.creditsProgressTextRightmost.textContent = creditsText;
 	}
-	else {
+	else { // Progress bar too big to read the credits on the far right, move them to the far left
 		GUI.creditsProgressTextLeft.textContent = precentage + " % ";
 		GUI.creditsProgressTextLeftmost.textContent = creditsText;
 	}
@@ -1054,7 +1163,7 @@ function updateGradeDistributionChart(gradeDistribution, honorsValue) {
 	const backgroundColors = [];
 	const borderColors = [];
 
-	for (let i = 18; i <= 30; i++) {
+	for (let i = MIN_GRADE; i < HONORS_GRADE; i++) {
 		labels.push(i.toString());
 		distribution.push(gradeDistribution[i]);
 		backgroundColors.push(computeExamBackgroundColor(i));
@@ -1062,13 +1171,13 @@ function updateGradeDistributionChart(gradeDistribution, honorsValue) {
 	}
 
 	if (honorsValue > 30) {
-		labels.push("30L");
-		distribution.push(gradeDistribution[31]);
-		backgroundColors.push(computeExamBackgroundColor(31));
-		borderColors.push(computeExamBorderColor(31));
+		labels.push(HONORS_TEXT);
+		distribution.push(gradeDistribution[HONORS_GRADE]);
+		backgroundColors.push(computeExamBackgroundColor(HONORS_GRADE));
+		borderColors.push(computeExamBorderColor(HONORS_GRADE));
 	}
 	else {
-		distribution[distribution.length - 1] = gradeDistribution[31];
+		distribution[distribution.length - 1] += gradeDistribution[HONORS_GRADE];
 	}
 	
 	GUI.gradeDistributionChart = new Chart(ctx, {
@@ -1102,7 +1211,8 @@ function computeExamBackgroundColor(grade, excludedCredits = 0) {
 }
 
 function computeExamBorderColor(grade) {
-	return computeExamColor(grade, 255);
+	const alpha = 255;
+	return computeExamColor(grade, alpha);
 }
 
 /**
@@ -1111,16 +1221,15 @@ function computeExamBorderColor(grade) {
  * - Alpha must be in the range [0, 255]
  */
 function computeExamColor(grade, alpha) {
-	const gradeNormalized = (grade - 18) / 13;
-	const limits = global.colorMapLimits[global.extensionSettings.colorMap];
+	const gradeNormalized = (grade - MIN_GRADE) / (HONORS_GRADE - MIN_GRADE);
+	const limits = COLOR_MAP_LIMITS[global.extensionSettings.colorMap];
 	const tone = gradeNormalized * limits.scale + limits.offset;
 	const color = d3[global.extensionSettings.colorMap](tone);
 	if (color.length === 7) {
-		// Color returned in hex format
+		// Color was returned in hex format
 		return color + alpha.toString(16).padStart(2, "0");
-	}
-	else {
-		// Color returned in RGB format
+	} else {
+		// Color was returned in RGB format
 		return color.replace(")", ", " + (alpha/255).toFixed(1) + ")");
 	}
 }
