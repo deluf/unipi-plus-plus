@@ -1,6 +1,6 @@
 
 # `UniPi++`
-![icon](src/images/icon_128.png)
+<img src="src/images/icon_128.png" alt="icon" width=128 height=128>
 
 FIXME: Chrome web store link
 FIXME: Pray people to actually rate it
@@ -9,7 +9,7 @@ FIXME: Pray people to actually rate it
 
 ## `IT 🇮🇹`
 
-**UniPi++** è un'estensione NON UFFICIALE che NON è sviluppata e NON è affiliata in ALCUN modo con l'Università di Pisa
+_**UniPi++** è un'estensione NON UFFICIALE che NON è sviluppata e NON è affiliata in ALCUN modo con l'Università di Pisa_
 
 > ### Panoramica
 
@@ -17,29 +17,39 @@ FIXME: Pray people to actually rate it
 
 > ### Funzionalità
 
-1. **Dashboard**
-    Una dashboard mostra la media ponderata e aritmetica, il voto di laurea previsto, la distribuzione dei voti (istogramma) e un grafico di progressione dei voti (scatterplot)
-    ![home](screenshots/home.png)
+i. **Dashboard**
 
-    In particolare:
-    - Le metriche possono essere calcolate per anno accademico o sull'insieme di tutti gli esami
-    - Singoli esami possono essere esclusi tramite semplici checkbox
-    ![home](screenshots/checkbox.png)
-    - Tutti i parametri di calcolo (e.g., il valore della lode, le esclusioni di CFU) ed anche alcune impostazioni visive (e.g., la mappa dei colori) possono essere completamente personalizzati tramite il menu dell'estensione (click sull'icona)
-    ![home](screenshots/popup.png)
+Una dashboard mostra la media ponderata e aritmetica, il voto di laurea previsto, la distribuzione dei voti (istogramma) e un grafico di progressione dei voti (scatterplot) 
 
-2. **Confronto con le statistiche medie**
-    Un menu a tendina ti permette di confrontare le tue statistiche con i risultati medi di qualsiasi corso di laurea offerto dall'Università di Pisa
-    ![home](screenshots/almalaurea.png)
-    > I dati provengono da statistiche pubblicamente disponibili su [www.almalaurea.it](https://www.almalaurea.it)
+![home](screenshots/home.png)
 
-3. **Previsione esami**
-    Simula come cambierebbe la tua media a seconda dei voti che pensi di prendere nei prossimi esami
-    ![home](screenshots/forecast.png)
+In particolare:
 
-> Come viene previsto il voto di laurea?
-Tramite un modello di regressione quadratica addestrato sulla relazione "media degli esami" -> "media dei voti di laurea" considerando tutti i corsi di laurea offerti dall'Università di Pisa negli anni 2022, 2023 e 2024
-![home](screenshots/predictor.png)
+- Le metriche possono essere calcolate per anno accademico o sull'insieme di tutti gli esami
+
+- Singoli esami possono essere esclusi tramite semplici checkbox
+
+![home](screenshots/checkbox.png)
+
+- Tutti i parametri di calcolo (e.g., il valore della lode, le esclusioni di CFU) ed anche alcune impostazioni visive (e.g., la mappa dei colori) possono essere completamente personalizzati tramite il menu dell'estensione (click sull'icona)
+
+![home](screenshots/popup.png)
+
+ii. **Confronto con le statistiche medie**
+
+Un menu a tendina ti permette di confrontare le tue statistiche con i risultati medi di qualsiasi corso di laurea offerto dall'Università di Pisa
+
+![home](screenshots/almalaurea.png)
+
+> I dati provengono da statistiche pubblicamente disponibili su [www.almalaurea.it](https://www.almalaurea.it)
+
+iii. **Previsione esami**
+
+Simula come cambierebbe la tua media a seconda dei voti che pensi di prendere nei prossimi esami
+
+![home](screenshots/forecast.png)
+
+> Come viene previsto il voto di laurea? Tramite un modello di regressione quadratica addestrato sulla relazione "media degli esami" --> "media dei voti di laurea" considerando tutti i corsi di laurea offerti dall'Università di Pisa negli anni 2022, 2023 e 2024 ![home](screenshots/predictor.png)
 
 > ### Privacy
 
@@ -47,17 +57,21 @@ Tramite un modello di regressione quadratica addestrato sulla relazione "media d
 - L'estensione legge solo la tabella degli esami (nomi, voti e CFU) e nient'altro
 - Tutti i dati vengono elaborati localmente sul computer dell’utente. Nulla viene mai trasmesso o memorizzato su server esterni
 
+<div>
 Q: Come faccio a sapere che quello scritto sopra è vero?
-A: L'estensione è completamente open-source. Puoi ispezionare il codice sorgente qui: [https://github.com/deluf/unipi-plus-plus](https://github.com/deluf/unipi-plus-plus)
-
+<br>
+A: L'estensione è completamente open-source. Puoi ispezionare il codice sorgente <a href="src/">qui</a>
+<br><br>
 Q: Come faccio a sapere che è proprio quel codice ad essere stato caricato nell'estensione pubblicata sul Chrome Web Store?
+<br>
 A: FIXME:
+</div>
 
 ---
 
 ## `EN 🇬🇧`
 
-**UniPi++** is an UNOFFICIAL extension that is NOT developed by and NOT affiliated in ANY way with the "Università di Pisa"
+_**UniPi++** is an UNOFFICIAL extension that is NOT developed by and NOT affiliated in ANY way with the "Università di Pisa"_
 
 > ### Overview
 
@@ -65,29 +79,39 @@ A: FIXME:
 
 > ### Features
 
-1. **Comprehensive dashboard**
-    A visually pleasing dashboard that shows your weighted average, arithmetic average, predicted final grade, grade distribution chart (histogram) and grade progression chart (scatterplot)
-    ![home](screenshots/home.png)
+i. **Comprehensive dashboard**
 
-    In particular:
+A visually pleasing dashboard that shows your weighted average, arithmetic average, predicted final grade, grade distribution chart (histogram) and grade progression chart (scatterplot)
+
+![home](screenshots/home.png)
+
+- In particular:
+    
     - Metrics can be calculated per academic year or across all exams
+    
     - Individual exams can be excluded with simple checkboxes
+    
     ![home](screenshots/checkbox.png)
+    
     - All parameters (e.g., honors grade value, credit exclusions) and even visual settings (e.g., color map) can be fully customized via the extension’s popup menu
+    
     ![home](screenshots/popup.png)
 
-2. **Metrics comparison**
-    A dropdown menu wich allows you to compare your metrics with the average results of any degree program offered by the University of Pisa
-    ![home](screenshots/almalaurea.png)
-    > The reference data comes from publicly available statistics on [www.almalaurea.it](https://www.almalaurea.it)
+ii. **Metrics comparison**
 
-3. **Exam forecast**
-    Simulate how your average would change depending on the grades of your upcoming exams
-    ![home](screenshots/forecast.png)
+A dropdown menu wich allows you to compare your metrics with the average results of any degree program offered by the University of Pisa
 
-> How is the final grade predicted ?
-A quadratic regression model is applied, trained on the relationship between average exam grade and average final grade across all degree programs offered by the University of Pisa in the years 2022, 2023, and 2024
-![home](screenshots/predictor.png)
+![home](screenshots/almalaurea.png)
+
+> The reference data comes from publicly available statistics on [www.almalaurea.it](https://www.almalaurea.it)
+
+iii. **Exam forecast**
+
+Simulate how your average would change depending on the grades of your upcoming exams
+
+![home](screenshots/forecast.png)
+
+> How is the final grade predicted ? A quadratic regression model is applied, trained on the relationship between average exam grade and average final grade across all degree programs offered by the University of Pisa in the years 2022, 2023, and 2024 ![home](screenshots/predictor.png)
 
 > ### Privacy
 
@@ -95,8 +119,12 @@ A quadratic regression model is applied, trained on the relationship between ave
 - The extension only reads the exam table (exam names, grades and credits) and nothing else
 - All data is processed locally on the user's computer. Nothing is ever transmitted to or stored on any external server
 
+<div>
 Q: How do i know that the above privacy facts are true?
-A: The extension is fully open source. You can inspect the source code here: [https://github.com/deluf/unipi-plus-plus](https://github.com/deluf/unipi-plus-plus)
-
+<br>
+A: The extension is fully open source. You can inspect the source code <a href="src/">here</a>
+<br><br>
 Q: How do i know that's the code actually submitted to the Chrome Web Store?
+<br>
 A: FIXME:
+</div>
