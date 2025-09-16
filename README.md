@@ -4,6 +4,7 @@
 
 FIXME: Chrome web store link
 FIXME: Pray people to actually rate it
+FIXME: Mettere la mail per problemi vari
 
 ---
 
