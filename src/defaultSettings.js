@@ -1,4 +1,3 @@
-
 const DEFAULT_SETTINGS = {
     honorsValue: 33,
     programDuration: 180,

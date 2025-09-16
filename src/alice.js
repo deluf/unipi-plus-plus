@@ -1,26 +1,3 @@
-
-/**
- * FIXME: remove fixmes:)
- * Policy Requirement: Under the "User Data Privacy" section, you must "be transparent in how you handle user data." This includes having a comprehensive privacy policy.
-
-What to Do:
-
-Host a privacy policy on a publicly accessible URL (e.g., using GitHub Pages, a personal website, or a service like Termly).
-
-In your policy, clearly state:
-
-What data is accessed (exam names, grades, credits).
-
-That all data is processed locally on the user's computer and is never transmitted to or stored on any external server. This is your extension's best feature from a privacy standpoint, so highlight it.
-
-How chrome.storage.local is used to save user settings.
-
-Link to this privacy policy in the designated field of your Chrome Web Store developer dashboard when you upload the extension.
- * 
- * UniPi++ is an UNOFFICIAL, third-party extension and is NOT developed by or affiliated in ANY way with the University of Pisa
- * 
- * * */
-
 "use strict";
 
 // Constants
@@ -43,7 +20,7 @@ const COLOR_MAP_LIMITS = {
 	interpolateCubehelixDefault: { scale: 0.8, offset: 0 },
 	interpolateRdPu: { scale: 0.7, offset: 0.3 },
 	interpolatePuBuGn: { scale: 0.7, offset: 0.3 },
-	interpolateGreys: { scale: 0.7, offset: 0.3 },
+	interpolateGreys: { scale: 0.7, offset: 0.3 }
 };
 
 // Global variables
@@ -51,8 +28,8 @@ const global = {
 	selectedAlmalaureaStats: null,
 	lastCompleteUserStats: null,
 	extensionSettings: {},
-	parsedExams: [],
-}
+	parsedExams: []
+};
 
 // GUI elements
 const GUI = {
@@ -215,7 +192,6 @@ function insertCheckboxes(rows, uncheckedExams) {
 
 function parseExams(rows, uncheckedExams) {
 	let parsedExams = [];
-	let debug = 18; //FIXME:
 	for (const row of rows) {
 		const cells = row.querySelectorAll("td");
 		const checkbox = row.querySelector("input[type=checkbox].upp-checkbox");
@@ -225,7 +201,7 @@ function parseExams(rows, uncheckedExams) {
   <td>
     <a ... >591AA - ANALISI I</a>		(name)
     <div>
-      <a id="ad_piano" ...>​</a>		 (here there might be sovran or debito icons, in this case it's ad_piano)
+      <a id="ad_piano" ...></a>		 (here there might be sovran or debito icons, in this case it's ad_piano)
     </div>
   </td>
   <td>...</td>						
@@ -272,17 +248,12 @@ function parseExams(rows, uncheckedExams) {
 			grade = parseInt(grade, 10); 
 		}
 		
-		// FIXME: Debug - use random grades
-		let gradeTmp = debug <= HONORS_GRADE ? debug : Math.round(Math.random() * 13 + 18);
-		debug++;
-		if (isNaN(grade)) { gradeTmp = grade; }
-		
 		if (uncheckedExams.includes(name)) {
 			checkbox.checked = false;
 		} else {
 			checkbox.checked = true;
 		}
-		parsedExams.push({name, credits, excludedCredits, grade : gradeTmp, date, checkbox});
+		parsedExams.push({name, credits, excludedCredits, grade, date, checkbox});
 	}
 	return parsedExams;
 }

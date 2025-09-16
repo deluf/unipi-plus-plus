@@ -1,4 +1,3 @@
-
 /*!
  * Chart.js v4.5.0
  * https://www.chartjs.org

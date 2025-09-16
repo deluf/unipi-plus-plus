@@ -1,4 +1,3 @@
-
 function parseNewSettings() {
     let honorsValueStr = document.querySelector("#honorsValue").value;
     let honorsValue = parseInt(honorsValueStr, 10) || DEFAULT_SETTINGS.honorsValue;

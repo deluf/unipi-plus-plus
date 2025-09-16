@@ -3,11 +3,11 @@ import statsmodels.api as sm
 import json
 import matplotlib.pyplot as plt
 
-with open("dati_2024_Pisa.json", "r", encoding="utf-8") as f:
+with open("almaLaurea_2024_Pisa.json", "r", encoding="utf-8") as f:
     data_2024 = json.load(f)
-with open("dati_2023_Pisa.json", "r", encoding="utf-8") as f:
+with open("almaLaurea_2023_Pisa.json", "r", encoding="utf-8") as f:
     data_2023 = json.load(f)
-with open("dati_2022_Pisa.json", "r", encoding="utf-8") as f:
+with open("almaLaurea_2022_Pisa.json", "r", encoding="utf-8") as f:
     data_2022 = json.load(f)
 data = data_2024 + data_2023 + data_2022
 x = np.array([d["voto_esami_medio"] for d in data if d["voto_esami_medio"] is not None]).reshape(-1, 1)
@@ -20,13 +20,24 @@ model = sm.OLS(y, X).fit()
 x_range = np.linspace(x.min(), x.max(), 300).reshape(-1, 1)
 X_range = np.column_stack((x_range**2, x_range, np.ones(len(x_range))))
 y_pred = model.predict(X_range)
+
+
+plt.rc('font', family='serif')
+plt.rc('font', size=12)
 plt.figure(figsize=(8, 5))
 plt.scatter(x, y, alpha=0.6, label="Data")
-plt.plot(x_range, y_pred, color="red", linewidth=2, label="Fitted quadratic")
+plt.plot(x_range, y_pred, color="red", linewidth=2, label="Fitted quadratic model")
+
+plt.legend(prop={'size': 11}, loc='upper left', fancybox=False, edgecolor="black")
+plt.tick_params(direction="in", length=5, width=1.5)
+plt.grid(alpha=0.5)
+axxx = plt.gca()
+for spine in axxx.spines.values():
+	spine.set_linewidth(2)  # Set the border thickness (e.g., 2.5)
+
 plt.xlabel("Voto esami medio")
 plt.ylabel("Voto finale medio")
-plt.title("Quadratic Regression Fit")
-plt.legend()
+plt.title("Dati AlmaLaurea dei laureati UniPi (aggregati per corso) nel 2022, 2023 e 2024", fontsize=11)
 plt.grid(True)
 plt.show()
 
