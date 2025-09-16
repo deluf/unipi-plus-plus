@@ -1,5 +1,6 @@
 
 /**
+ * FIXME: remove fixmes:)
  * Policy Requirement: Under the "User Data Privacy" section, you must "be transparent in how you handle user data." This includes having a comprehensive privacy policy.
 
 What to Do:
@@ -16,7 +17,7 @@ How chrome.storage.local is used to save user settings.
 
 Link to this privacy policy in the designated field of your Chrome Web Store developer dashboard when you upload the extension.
  * 
- * "UniPi++ is an unofficial, third-party extension and is not developed by or affiliated in any way with the University of Pisa."
+ * UniPi++ is an UNOFFICIAL, third-party extension and is NOT developed by or affiliated in ANY way with the University of Pisa
  * 
  * * */
 
@@ -36,13 +37,13 @@ const HONORS_GRADE = 31;
 const MIN_GRADE = 18;
 	// Limits the dynamic range of each color map to preserve visibility on a gray background
 const COLOR_MAP_LIMITS = {
-	interpolateMagma: { scale: 12/13, offset: 0 },
-	interpolateViridis: { scale: 12/13, offset: 0 },
-	interpolateCividis: { scale: 12/13, offset: 0 },
-	interpolateCubehelixDefault: { scale: 11/13, offset: 0 },
-	interpolateRdPu: { scale: 9/13, offset: 4/13 },
-	interpolatePuBuGn: { scale: 9/13, offset: 4/13 },
-	interpolateGreys: { scale: 9/13, offset: 4/13 },
+	interpolateMagma: { scale: 0.9, offset: 0 },
+	interpolateViridis: { scale: 0.9, offset: 0 },
+	interpolateCividis: { scale: 0.9, offset: 0 },
+	interpolateCubehelixDefault: { scale: 0.8, offset: 0 },
+	interpolateRdPu: { scale: 0.7, offset: 0.3 },
+	interpolatePuBuGn: { scale: 0.7, offset: 0.3 },
+	interpolateGreys: { scale: 0.7, offset: 0.3 },
 };
 
 // Global variables
@@ -680,7 +681,7 @@ function drawAlmalaureaFilters(container) {
     const facoltaSelect = createSelect("upp-almalaurea-facolta", "Facoltà / Dipartimento");
     const postcorsoSelect = createSelect("upp-almalaurea-postcorso", "Corso di laurea");
 
-    const corstipoItems = [...new Set(almaLaureaData.map(d => d.corstipo))];
+    const corstipoItems = [...new Set(ALMALAUREA_DATA.map(d => d.corstipo))];
     populateSelect(corstipoSelect, corstipoItems, "un tipo di corso");
 
     corstipoSelect.addEventListener("change", () => {
@@ -690,7 +691,7 @@ function drawAlmalaureaFilters(container) {
 		clearAlmalaureaStats();
 		if (selectedCorstipo == "") { return; }
 
-        const filteredAlmaLaureaData = almaLaureaData.filter(d => d.corstipo === selectedCorstipo);
+        const filteredAlmaLaureaData = ALMALAUREA_DATA.filter(d => d.corstipo === selectedCorstipo);
         const facoltaItems = [...new Set(filteredAlmaLaureaData.map(d => d.facolta))];
         populateSelect(facoltaSelect, facoltaItems, "una facoltà / dipartimento");
     });
@@ -702,7 +703,7 @@ function drawAlmalaureaFilters(container) {
 		postcorsoSelect.innerHTML = "";
 		if (selectedFacolta == "") { return; }
 
-        const filteredAlmaLaureaData = almaLaureaData.filter(d => d.corstipo === selectedCorstipo && d.facolta === selectedFacolta);
+        const filteredAlmaLaureaData = ALMALAUREA_DATA.filter(d => d.corstipo === selectedCorstipo && d.facolta === selectedFacolta);
         const postcorsoItems = [...new Set(filteredAlmaLaureaData.map(d => d.postcorso))];
         populateSelect(postcorsoSelect, postcorsoItems, "un corso di laurea");
     });
@@ -716,7 +717,7 @@ function drawAlmalaureaFilters(container) {
 			return;
 		}
         
-        global.selectedAlmalaureaStats = almaLaureaData.find(d => 
+        global.selectedAlmalaureaStats = ALMALAUREA_DATA.find(d => 
             d.corstipo === selectedCorstipo && 
             d.facolta === selectedFacolta && 
             d.postcorso === selectedPostcorso

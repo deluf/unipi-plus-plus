@@ -172,6 +172,6 @@ for corstipo_value, corstipo_text in corstipo_dict.items():
             scraped_data.append(scraped_corso)
             sleep(2) # Avoid getting rate limited. Please don't sue me :)
 
-with open(f"dati_{anno_choice}_{ateneo_dict[ateneo_choice]}.json", "w", encoding="utf-8") as f:
+with open(f"almaLaurea_{anno_choice}_{ateneo_dict[ateneo_choice]}.json", "w", encoding="utf-8") as f:
     json.dump(scraped_data, f, ensure_ascii=False, indent=4)
-exit(f"\nDati salvati in \"dati_{anno_choice}_{ateneo_dict[ateneo_choice]}.json\"")
+exit(f"\nDati salvati in \"almaLaurea_{anno_choice}_{ateneo_dict[ateneo_choice]}.json\"")

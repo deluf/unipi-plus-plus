@@ -180,7 +180,7 @@
 }
 
 .upp-checkbox {
-    margin-right: 5px !important; /* Otherwise overridden by already existing css */
+    margin-right: 5px !important;
 	width: 16px;
 	height: 16px;
     cursor: pointer;
