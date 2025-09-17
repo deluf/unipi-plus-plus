@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "UniPi++",
-	"version": "1.0",
+	"version": "1.0.0",
 	"description": "Estende il portale Alice dell'università di Pisa aggiungendo numerose statistiche sugli esami verbalizzati",
 	"permissions": ["storage"],
 	"icons": {

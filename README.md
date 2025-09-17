@@ -2,8 +2,7 @@
 # `UniPi++`
 <img src="src/images/icon_128.png" alt="icon" width=128 height=128>
 
-FIXME: Chrome web store link
-FIXME: Pray people to actually rate it
+FIXME: Chrome web store link - also in the github about section
 FIXME: Mettere la mail per problemi vari
 
 ---
