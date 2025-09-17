@@ -33,6 +33,9 @@ const global = {
 
 // GUI elements
 const GUI = {
+	// Exam table (element already present in the website)
+	examTable: document.querySelector("#tableLibretto tbody"),
+
 	// Academic year filter
 	academicYearFilter: null,
 
@@ -93,13 +96,16 @@ async function init() {
 		return; // Stop the execution
 	}
 
-	const spinnerSelector = "#floating > div.footable-loader";
-	const rowsSelector = "#tableLibretto tbody tr";
-	await waitForElementToAppear(spinnerSelector, 2000);
-	await waitForElementToDisappear(spinnerSelector, 1000);
-	await waitForElementToAppear(rowsSelector, 500);
-
+	// The website first sends all the exams in the exam table
 	const rows = document.querySelectorAll("#tableLibretto tbody tr");
+
+	// Then (for some reason unknown to mankind), re-renders them in a fancier table
+	//  (even on more pages) using some kind of front end framework that overrides any checkbox 
+	const spinnerSelector = "#floating > div.footable-loader";
+	await waitForElementToAppear(spinnerSelector, 3000);
+	await waitForElementToDisappear(spinnerSelector, 10000);
+	
+	// That's why checkboxes are loaded later
 	insertCheckboxes(rows, uncheckedExams);
 	global.parsedExams = parseExams(rows, uncheckedExams);
 	
@@ -112,6 +118,14 @@ async function init() {
 			updateGUI();
 		}
 	});
+
+	// If the table is distributed on more pages, then, for some reason, the checkboxes
+	//  in the pages different than the currently visible one are removed.
+	// This function re-adds them every time the page changes
+	new MutationObserver(() => { onExamTableRefresh(uncheckedExams) }).observe(
+		GUI.examTable,
+		{ childList: true /* watch for added/removed/modified children (rows) */ }
+	)
 }
 
 function waitForElementToAppear(selector, timeout = 1000) {
@@ -156,6 +170,21 @@ function waitForElementToDisappear(selector, timeout = 1000) {
 		});
 		observer.observe(document.body, { childList: true, subtree: true });
 	});
+}
+
+function onExamTableRefresh(uncheckedExams) {
+	const visibleRows = Array.from(GUI.examTable.rows);
+	if (visibleRows.length === 0) { return; }
+	if (visibleRows.some(row => row.querySelector("input[type=checkbox].upp-checkbox") != null)) { return; }
+
+	insertCheckboxes(visibleRows, uncheckedExams);
+	const visibleExams = parseExams(visibleRows, uncheckedExams);
+
+	// Assign the checkboxes in visibleExams to global.parsedExams if .name corresponds
+	for (const exam of global.parsedExams) {
+		const match = visibleExams.find(vExam => vExam.name === exam.name);
+		if (match) { exam.checkbox = match.checkbox; }
+	}
 }
 
 function insertCheckboxes(rows, uncheckedExams) {
@@ -237,13 +266,13 @@ function parseExams(rows, uncheckedExams) {
 
 		let grade = grade_and_date[0];
 		let excludedCredits = 0;
-		if (grade === "IDO") { 
+		if (grade === HONORS_TEXT) { 
+			grade = HONORS_GRADE; // Later it will be converted to the actual honors value
+		} else if (isNaN(grade)) { 
 			// The exam does not havea a grade, just a "passed")
 			grade = NaN;
 			checkbox.disabled = true;
 			excludedCredits = credits; 
-		} else if (grade === HONORS_TEXT) { 
-			grade = HONORS_GRADE; // Later it will be converted to the actual honors value
 		} else { 
 			grade = parseInt(grade, 10); 
 		}
@@ -738,9 +767,7 @@ function createEmptyForecastTable() {
 			const td = document.createElement("td");
 			td.textContent = values[0];
 			td.colSpan = 14;
-			td.style.textAlign = "left";
-			td.style.paddingTop = ".75em";
-			td.style.paddingLeft = ".75em";
+			td.className = "upp-forecast-table-header";
 			tr.appendChild(td);
 		}
 		else {
@@ -1108,7 +1135,7 @@ function updateCreditsProgressBar(achievedCredits, totalCredits) {
 	GUI.creditsProgressTextRight.style.position = "absolute";
 	GUI.creditsProgress.style.width = precentage + "%";
 
-	if (precentage < 15) { // Progress bar too little to contain text
+	if (precentage < 20) { // Progress bar too little to contain text
 		GUI.creditsProgressTextRight.textContent = precentage + " %";
 		GUI.creditsProgressTextRight.style.position = "relative";
 		GUI.creditsProgressTextRightmost.textContent = creditsText;
