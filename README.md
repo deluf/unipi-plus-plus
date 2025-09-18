@@ -1,4 +1,3 @@
-
 # `UniPi++`
 <img src="src/images/icon_128.png" alt="icon" width=128 height=128>
 
@@ -64,11 +63,6 @@ Simula come cambierebbe la tua media a seconda dei voti che pensi di prendere ne
 Q: Come faccio a sapere che quello scritto sopra è vero?
 <br>
 A: L'estensione è completamente open-source. Puoi ispezionare il codice sorgente <a href="src/">qui</a>
-<br><br>
-Q: Come faccio a sapere che è proprio quel codice ad essere stato caricato nell'estensione pubblicata sul Chrome Web Store?
-<br>
-A: FIXME:
-</div>
 
 ---
 
@@ -126,8 +120,3 @@ Simulate how your average would change depending on the grades of your upcoming 
 Q: How do i know that the above privacy facts are true?
 <br>
 A: The extension is fully open source. You can inspect the source code <a href="src/">here</a>
-<br><br>
-Q: How do i know that's the code actually submitted to the Chrome Web Store?
-<br>
-A: FIXME:
-</div>
