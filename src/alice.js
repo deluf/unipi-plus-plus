@@ -22,6 +22,7 @@ const COLOR_MAP_LIMITS = {
 	interpolatePuBuGn: { scale: 0.7, offset: 0.3 },
 	interpolateGreys: { scale: 0.7, offset: 0.3 }
 };
+const FORCED_REFRESH_THRESHOLD_SECONDS = 60;
 
 // Global variables
 const global = {
@@ -72,17 +73,20 @@ const GUI = {
 
 init();
 async function init() {
-	let uncheckedExams;
+	let uncheckedExams, lastForcedRefreshTimestamp, localStorage;
 	try {
-		const settingslocalStorageQueryResult = await chrome.storage.local.get("settings");
+		localStorage = await chrome.storage.local.get("settings");
 		global.extensionSettings = {
 			...DEFAULT_SETTINGS,
-			...settingslocalStorageQueryResult.settings
+			...localStorage.settings
 		};
 
-		const uncheckedExamslocalStorageQueryResult = await chrome.storage.local.get("uncheckedExams");
-		uncheckedExams = uncheckedExamslocalStorageQueryResult.uncheckedExams ? 
-			uncheckedExamslocalStorageQueryResult.uncheckedExams : [];
+		localStorage = await chrome.storage.local.get("uncheckedExams");
+		uncheckedExams = localStorage.uncheckedExams ? localStorage.uncheckedExams : [];
+
+		localStorage = await chrome.storage.local.get("lastForcedRefreshTimestamp");
+		lastForcedRefreshTimestamp = localStorage.lastForcedRefreshTimestamp ? 
+			localStorage.lastForcedRefreshTimestamp : 0; // Jan 1, 1970, 00:00:00 UTC
 	}
 	catch {
 		global.extensionSettings = DEFAULT_SETTINGS;
@@ -96,19 +100,34 @@ async function init() {
 		return; // Stop the execution
 	}
 
-	// The website first sends all the exams in the exam table
-	const rows = document.querySelectorAll("#tableLibretto tbody tr");
-
-	// Then (for some reason unknown to mankind), re-renders them in a fancier table
-	//  (even on more pages) using some kind of front end framework that overrides any checkbox 
-	const spinnerSelector = "#floating > div.footable-loader";
-	await waitForElementToAppear(spinnerSelector, 3000);
-	await waitForElementToDisappear(spinnerSelector, 10000);
-	
-	// That's why checkboxes are loaded later
-	insertCheckboxes(rows, uncheckedExams);
+	/**
+	 * It looks like that the exams table is either dinamically loaded or has something to do with caching.
+	 * When the cache is disabled in the developer tools, the exams table is NOT available in the DOM until a few
+	 *  hundrer milliseconds, after which only the first page of exams is loaded (fine for every degree program
+	 *  except 5-year ones, where exams are most likely >= 30).
+	 * Otherwise, the exams table is immediately available in the DOM and always contains all exams.
+	 * 
+	 * 	We therefore adopt this strategy:
+	 * Aggressively fetch the exams table as soon as the website loads. If it is empty then reload the page
+	 *  to force caching. On the next reload, the exams table should be fully and immediately available in the DOM.
+	 * If, for any reason, this does not happen, the page does not reload a second time thanks to the saved timestamp.
+	 */
+	let rows = document.querySelectorAll("#tableLibretto tbody tr");
 	global.parsedExams = parseExams(rows, uncheckedExams);
-	
+
+	const nowTimestamp = new Date().getTime();
+	const secondsSinceLastForcedRefresh = (nowTimestamp - lastForcedRefreshTimestamp) / 1000;
+	if (global.parsedExams.length === 0 && secondsSinceLastForcedRefresh > FORCED_REFRESH_THRESHOLD_SECONDS) {
+		await chrome.storage.local.set({ lastForcedRefreshTimestamp: nowTimestamp });
+		location.reload(); 
+		return;
+	};
+
+	if (global.parsedExams.length === 0) {
+		console.log("[init()] Even after a forced reload, the exams table is still empty")
+		// Continue anyway, only the visible exams will be considered once loaded - this is still fine for 90% of users
+	}
+
 	updateGUI();
 
 	// If the user changes any option in the extension's popup, update the GUI
@@ -119,57 +138,16 @@ async function init() {
 		}
 	});
 
-	// If the table is distributed on more pages, then, for some reason, the checkboxes
-	//  in the pages different than the currently visible one are removed.
-	// This function re-adds them every time the page changes
+	/**
+	 * Every time the exam table changes (i.e., it loads for the first time or it is distributed 
+	 *  on more pages and the user changes the page) the front-end framework used by the website
+	 *  MIGHT reset the checkboxes (for unknown reasons to mankind). IF necessary, this function
+	 *  re-adds them.
+	 */
 	new MutationObserver(() => { onExamTableRefresh(uncheckedExams) }).observe(
 		GUI.examTable,
 		{ childList: true /* watch for added/removed/modified children (rows) */ }
 	)
-}
-
-function waitForElementToAppear(selector, timeout = 1000) {
-	return new Promise((resolve, reject) => {
-		if (document.querySelector(selector)) { 
-			return resolve(); 
-		}
-		
-		const timeoutId = setTimeout(() => {
-			observer.disconnect();
-			reject(new Error(`Element "${selector}" did not appear within ${timeout}ms`));
-		}, timeout);
-		
-		const observer = new MutationObserver(() => {
-			if (document.querySelector(selector)) {
-				clearTimeout(timeoutId);
-				observer.disconnect();
-				resolve();
-			}
-		});
-		observer.observe(document.body, { childList: true, subtree: true });
-	});
-}
-
-function waitForElementToDisappear(selector, timeout = 1000) {
-	return new Promise((resolve, reject) => {
-		if (!document.querySelector(selector)) { 
-			return resolve(); 
-		}
-		
-		const timeoutId = setTimeout(() => {
-			observer.disconnect();
-			reject(new Error(`Element "${selector}" did not disappear within ${timeout}ms`));
-		}, timeout);
-		
-		const observer = new MutationObserver(() => {
-			if (!document.querySelector(selector)) {
-				clearTimeout(timeoutId);
-				observer.disconnect();
-				resolve();
-			}
-		});
-		observer.observe(document.body, { childList: true, subtree: true });
-	});
 }
 
 function onExamTableRefresh(uncheckedExams) {
@@ -180,11 +158,21 @@ function onExamTableRefresh(uncheckedExams) {
 	insertCheckboxes(visibleRows, uncheckedExams);
 	const visibleExams = parseExams(visibleRows, uncheckedExams);
 
-	// Assign the checkboxes in visibleExams to global.parsedExams if .name corresponds
-	for (const exam of global.parsedExams) {
-		const match = visibleExams.find(vExam => vExam.name === exam.name);
-		if (match) { exam.checkbox = match.checkbox; }
+	if (global.parsedExams.length === 0) {
+		global.parsedExams = visibleExams;
+		updateGUI();
+		return;
 	}
+	
+	for (const visibleExam of visibleExams) {
+		// Find if the visible exam has already been parsed
+		const existingExamMatched = global.parsedExams.find(existingExam => existingExam.name === visibleExam.name);
+		// If yes, just update its checkbox
+		if (existingExamMatched) { existingExamMatched.checkbox = visibleExam.checkbox; }
+		// If not, add it to the list
+		else { global.parsedExams.push(visibleExam); }
+	}
+	updateGUI();
 }
 
 function insertCheckboxes(rows, uncheckedExams) {
@@ -213,7 +201,7 @@ function insertCheckboxes(rows, uncheckedExams) {
 			else if (checkbox.checked && uncheckedExams.includes(examName)) {
         		uncheckedExams.splice(uncheckedExams.indexOf(examName), 1);
 			}
-			chrome.storage.local.set({ "uncheckedExams": uncheckedExams });
+			chrome.storage.local.set({ uncheckedExams: uncheckedExams });
 			updateGUI();
 		});
 	});
@@ -223,7 +211,16 @@ function parseExams(rows, uncheckedExams) {
 	let parsedExams = [];
 	for (const row of rows) {
 		const cells = row.querySelectorAll("td");
-		const checkbox = row.querySelector("input[type=checkbox].upp-checkbox");
+		
+		let checkbox = row.querySelector("input[type=checkbox].upp-checkbox");
+		// Create a dummy checkbox if none exists - it will (hopefully) be overwritten later anyway.
+		// Why creating it if it will be overwritten? The updateGUI functions assumes that each exam
+		//  is always assigned to a GUI checkbox (reads the checkbox.checked value)
+		if (checkbox == null) {
+			checkbox = document.createElement("input");
+			checkbox.type = "checkbox";
+			checkbox.checked = false;
+		}
 
 		/** Example of a row element
 <tr>
@@ -844,6 +841,11 @@ function updateForecastTable() {
 }
 
 function updateGUI() {
+	if (global.parsedExams.length === 0) { 
+		console.log("[updateGUI]: Ignoring requested GUI update - Empty exams list");
+		return; 
+	}
+	
 	const selectedExams = global.parsedExams.filter(exam => exam.checkbox.checked === true);
 	const gradedSelectedExams = selectedExams.filter(exam => !isNaN(exam.grade));
 	const selectedAcademicYear = updateAcademicYearFilter(gradedSelectedExams);
@@ -853,6 +855,7 @@ function updateGUI() {
 		global.extensionSettings.exclusionPolicy,
 		global.extensionSettings.exclusionValue
 	)
+
 	if (!selectedExamsWithAdjustedCredits.some(
 		exam => !isNaN(exam.grade) && (exam.credits - exam.excludedCredits > 0)
 	)) { 
