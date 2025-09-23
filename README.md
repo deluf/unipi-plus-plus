@@ -1,11 +1,10 @@
 # `UniPi++`
-<img src="src/images/icon_128.png" alt="icon" width=128 height=128>
 
-### [Scaricala dal Chrome Web Store](https://chromewebstore.google.com/detail/unipi++/iblkplielknafpegjacgjbpgjgdcnkij)
+<a href="https://chromewebstore.google.com/detail/unipi++/iblkplielknafpegjacgjbpgjgdcnkij"><img src="screenshots/chrome.png" alt="Chrome web store banner"></a>
+<a href="https://addons.mozilla.org/en-US/firefox/addon/unipi/"><img src="screenshots/firefox.webp" alt="Mozilla add-on banner"></a>
 
-Per qualsiasi problema, contattami su 
-
-<img src="screenshots/email.png" alt="icon" width=280 height=22>
+Per qualsiasi problema, contattami su
+<br><img src="screenshots/email.png" alt="icon" width=280 height=22>
 
 ---
 

@@ -20,5 +20,10 @@
 			"js": ["almaLaureaData.js", "defaultSettings.js", "dependencies.js", "alice.js"],
 			"css": ["styles.css"]
 		}
-	]
+	],
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "unipipp@deluf.github.io"
+		}
+	}
 }
