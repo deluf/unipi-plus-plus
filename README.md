@@ -3,18 +3,18 @@
 <a href="https://chromewebstore.google.com/detail/unipi++/iblkplielknafpegjacgjbpgjgdcnkij"><img src="screenshots/chrome.png" alt="Chrome web store banner"></a>
 <a href="https://addons.mozilla.org/en-US/firefox/addon/unipi/"><img src="screenshots/firefox.webp" alt="Mozilla add-on banner"></a>
 
+> Il primo link (Chrome Web Store) funziona con qualsiasi browser basato su Chromium (e.g., Chrome, Brave, Edge, Opera)
+
 Per qualsiasi problema, contattami su
 <br><img src="screenshots/email.png" alt="icon" width=280 height=22>
 
 ---
 
-## `IT 🇮🇹`
-
 _**UniPi++** è un'estensione NON UFFICIALE che NON è sviluppata e NON è affiliata in ALCUN modo con l'Università di Pisa_
 
 > ### Panoramica
 
-**UniPi++** è un'estensione Chrome che migliora il portale studenti dell'Università di Pisa aggiungendo statistiche e approfondimenti dettagliati sia sugli esami già sostenuti che su quelli futuri
+**UniPi++** è un'estensione che migliora il portale studenti dell'Università di Pisa aggiungendo statistiche e approfondimenti dettagliati sia sugli esami già sostenuti che su quelli futuri
 
 > ### Funzionalità
 
@@ -62,60 +62,3 @@ Simula come cambierebbe la tua media a seconda dei voti che pensi di prendere ne
 Q: Come faccio a sapere che quello scritto sopra è vero?
 <br>
 A: L'estensione è completamente open-source. Puoi ispezionare il codice sorgente <a href="src/">qui</a>
-
----
-
-## `EN 🇬🇧`
-
-_**UniPi++** is an UNOFFICIAL extension that is NOT developed by and NOT affiliated in ANY way with the "Università di Pisa"_
-
-> ### Overview
-
-**UniPi++** is a Chrome extension that enhances the University of Pisa student portal by adding detailed statistics and insights about both completed and future exams
-
-> ### Features
-
-i. **Comprehensive dashboard**
-
-A visually pleasing dashboard that shows your weighted average, arithmetic average, predicted final grade, grade distribution chart (histogram) and grade progression chart (scatterplot)
-
-![home](screenshots/home.png)
-
-- In particular:
-    
-    - Metrics can be calculated per academic year or across all exams
-    
-    - Individual exams can be excluded with simple checkboxes
-    
-    ![home](screenshots/checkbox.png)
-    
-    - All parameters (e.g., honors grade value, credit exclusions) and even visual settings (e.g., color map) can be fully customized via the extension’s popup menu
-    
-    ![home](screenshots/popup.png)
-
-ii. **Metrics comparison**
-
-A dropdown menu wich allows you to compare your metrics with the average results of any degree program offered by the University of Pisa
-
-![home](screenshots/almalaurea.png)
-
-> The reference data comes from publicly available statistics on [www.almalaurea.it](https://www.almalaurea.it)
-
-iii. **Exam forecast**
-
-Simulate how your average would change depending on the grades of your upcoming exams
-
-![home](screenshots/forecast.png)
-
-> How is the final grade predicted ? A quadratic regression model is applied, trained on the relationship between average exam grade and average final grade across all degree programs offered by the University of Pisa in the years 2022, 2023, and 2024 ![home](screenshots/predictor.png)
-
-> ### Privacy
-
-- The extension is only active on https://www.studenti.unipi.it/auth/studente/Libretto. It can not physically read data from any other websites
-- The extension only reads the exam table (exam names, grades and credits) and nothing else
-- All data is processed locally on the user's computer. Nothing is ever transmitted to or stored on any external server
-
-<div>
-Q: How do i know that the above privacy facts are true?
-<br>
-A: The extension is fully open source. You can inspect the source code <a href="src/">here</a>
