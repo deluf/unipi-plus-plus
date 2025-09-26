@@ -1,7 +1,7 @@
 # `UniPi++`
 
 <a href="https://chromewebstore.google.com/detail/unipi++/iblkplielknafpegjacgjbpgjgdcnkij"><img src="screenshots/chrome.png" alt="Chrome web store banner"></a>
-<a href="https://addons.mozilla.org/en-US/firefox/addon/unipi/"><img src="screenshots/firefox.webp" alt="Mozilla add-on banner"></a>
+<a href="https://addons.mozilla.org/addon/unipi/"><img src="screenshots/firefox.webp" alt="Mozilla add-on banner"></a>
 
 > Il primo link (Chrome Web Store) funziona con qualsiasi browser basato su Chromium (e.g., Chrome, Brave, Edge, Opera)
 
