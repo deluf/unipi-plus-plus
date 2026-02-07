@@ -18,7 +18,7 @@
             <img src="screenshots/firefox.webp" height=55 alt="Mozilla add-on banner">
             </a>
             <br>
-            <img src="https://img.shields.io/amo/users/unipi?logo=firefox&logoColor=white&label=Studenti%20Attivi&color=orange" alt="Firefox users">
+            <img src="https://img.shields.io/amo/users/unipi?logo=firefox&logoColor=white&label=Studenti%20attivi&color=orange" alt="Firefox users">
         </td>
     </tr>
 </table>
