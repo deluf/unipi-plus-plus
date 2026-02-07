@@ -35,9 +35,7 @@
 
 Una dashboard mostra la media ponderata e aritmetica, il voto di laurea previsto, la distribuzione dei voti ed un grafico di progressione dei voti
 
-<p align="center">
-    <img src="screenshots/home.png" alt="home" height=400>
-</p>
+<img src="screenshots/home.png" alt="home" height=400>
 
 In particolare:
 
@@ -45,24 +43,17 @@ In particolare:
 
 - Singoli esami possono essere esclusi tramite semplici checkbox
 
-<p align="center">
-    <img src="screenshots/checkbox.png" alt="checkbox" height=250>
-</p>
+<img src="screenshots/checkbox.png" alt="checkbox" height=250>
 
 - Tutti i parametri di calcolo (e.g., il valore della lode, eventuali esclusioni di CFU) ed anche alcune impostazioni visive (e.g., la mappa dei colori) possono essere completamente personalizzati tramite il menu dell'estensione (click sull'icona)
 
-<p align="center">
-    <img src="screenshots/popup.png" alt="popup" height=300>
-</p>
-
+<img src="screenshots/popup.png" alt="popup" height=300>
 
 ---
 
 È presente una sezione che permette di confrontare le tue statistiche con i risultati medi di qualsiasi corso di laurea offerto dall'Università di Pisa
 
-<p align="center">
-    <img src="screenshots/almalaurea.png" alt="almalaurea" height=250>
-</p>
+<img src="screenshots/almalaurea.png" alt="almalaurea" height=250>
 
 > I dati provengono da statistiche pubblicamente disponibili su [www.almalaurea.it](https://www.almalaurea.it)
 
@@ -70,11 +61,9 @@ In particolare:
 
 È presente anche un'ulteriore sezione che simula come cambierebbe la media a seconda dei voti previsti nei prossimi esami
 
-<p align="center">
-    <img src="screenshots/forecast.png" alt="forecast" height=250>
-</p>
+<img src="screenshots/forecast.png" alt="forecast" height=250>
 
-> Come viene previsto il voto di laurea? Tramite un modello di regressione quadratica addestrato sulla relazione "Media degli esami" --> "Media dei voti di laurea" considerando tutti i corsi di laurea offerti dall'Università di Pisa negli anni 2022, 2023 e 2024 <div align="center"><img src="screenshots/predictor.png" alt="predictor" height=350></div>
+> Come viene previsto il voto di laurea? Tramite un modello di regressione quadratica addestrato sulla relazione "Media degli esami" --> "Media dei voti di laurea" considerando tutti i corsi di laurea offerti dall'Università di Pisa negli anni 2022, 2023 e 2024 <img src="screenshots/predictor.png" alt="predictor" height=350>
 
 ---
 
